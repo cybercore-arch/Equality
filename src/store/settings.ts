@@ -26,6 +26,9 @@ interface SettingsState {
   /** Прошёл ли пользователь экран первого запуска */
   onboarded: boolean;
   setOnboarded: (v: boolean) => void;
+  /** Поиск Google для Gemini. По умолчанию выключен: на бесплатных ключах он часто недоступен */
+  searchEnabled: boolean;
+  setSearchEnabled: (v: boolean) => void;
   updateProvider: (id: ProviderKind, patch: Partial<ProviderConfig>) => void;
   setActiveProvider: (id: ProviderKind) => void;
   setMode: (id: string) => void;
@@ -39,6 +42,8 @@ export const useSettings = create<SettingsState>()(
       modeId: 'general',
       onboarded: false,
       setOnboarded: (v) => set({ onboarded: v }),
+      searchEnabled: false,
+      setSearchEnabled: (v) => set({ searchEnabled: v }),
       updateProvider: (id, patch) =>
         set((s) => ({ providers: s.providers.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       setActiveProvider: (id) => set({ activeProvider: id }),

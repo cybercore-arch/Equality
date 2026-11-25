@@ -9,6 +9,8 @@ export function Composer() {
   const busy = useChat((s) => s.streamingId !== null);
   const error = useChat((s) => s.error);
   const clearError = useChat((s) => s.clearError);
+  const retry = useChat((s) => s.retry);
+  const canRetry = useChat((s) => s.messages[s.path[s.path.length - 1]]?.role === 'user');
 
   const submit = () => {
     if (!text.trim() || busy) return;
@@ -22,7 +24,18 @@ export function Composer() {
     <div className="glass border-t border-fg/5 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
       {error && (
         <div className="mb-2 flex items-start gap-2 rounded-lg bg-red-950/60 px-3 py-2 text-sm text-red-200">
-          <span className="flex-1 break-words">{error}</span>
+          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{error}</span>
+          {canRetry && (
+            <button
+              onClick={() => {
+                clearError();
+                void retry();
+              }}
+              className="shrink-0 rounded-md bg-red-900/70 px-2 py-0.5 text-xs text-red-100"
+            >
+              Повторить
+            </button>
+          )}
           <button onClick={clearError} className="text-red-300">
             ✕
           </button>

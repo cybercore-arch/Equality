@@ -41,6 +41,7 @@ const STAGES = [
 
 /** Пока ответа нет: пульсирующие точки и стадия, которая меняется со временем. */
 function StatusLine() {
+  const note = useChat((s) => s.statusNote);
   const [i, setI] = useState(0);
   useEffect(() => {
     const t0 = Date.now();
@@ -62,8 +63,8 @@ function StatusLine() {
           <i key={d} className="typing-dot" style={{ animationDelay: `${d * 160}ms` }} />
         ))}
       </span>
-      <span key={i} className="shimmer anim-fade text-sm">
-        {STAGES[i].label}
+      <span key={note ?? i} className="shimmer anim-fade text-sm">
+        {note ?? STAGES[i].label}
       </span>
     </div>
   );

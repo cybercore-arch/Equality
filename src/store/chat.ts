@@ -60,6 +60,8 @@ interface ChatState {
   streamingId: string | null;
   /** Текст стримящегося сообщения: обновляется отдельно, чтобы не трогать остальной список */
   streamText: string;
+  /** Пояснение вместо стадии ответа, например «Модель перегружена, пробую снова» */
+  statusNote: string | null;
   error: string | null;
 
   init: () => Promise<void>;
@@ -68,6 +70,8 @@ interface ChatState {
   deleteChat: (id: string) => Promise<void>;
   send: (text: string) => Promise<void>;
   regenerate: () => Promise<void>;
+  /** Повторить запрос, если на последнее сообщение пользователя не пришёл ответ */
+  retry: () => Promise<void>;
   swipe: (messageId: string, dir: -1 | 1) => Promise<void>;
   stop: () => void;
   clearError: () => void;
@@ -154,18 +158,34 @@ export const useChat = create<ChatState>((set, get) => {
       set({ streamText: acc });
     };
 
+    const signal = abortCtl.signal;
+    let attempt = 0;
     try {
-      const stream = streamChat(provider, {
-        messages: input,
-        system: mode.systemPrompt,
-        temperature: mode.temperature,
-        topP: mode.topP,
-        googleSearch: mode.googleSearch && provider.id === 'gemini',
-        signal: abortCtl.signal,
-      });
-      for await (const chunk of stream) {
-        acc += chunk;
-        if (!raf) raf = requestAnimationFrame(flush);
+      // Если модель перегружена (5xx) и текст ещё не пошёл, тихо повторяем запрос до двух раз
+      for (;;) {
+        try {
+          const stream = streamChat(provider, {
+            messages: input,
+            system: mode.systemPrompt,
+            temperature: mode.temperature,
+            topP: mode.topP,
+            googleSearch: mode.googleSearch && settings.searchEnabled && provider.id === 'gemini',
+            signal,
+          });
+          for await (const chunk of stream) {
+            acc += chunk;
+            if (!raf) raf = requestAnimationFrame(flush);
+          }
+          break;
+        } catch (e) {
+          const status = (e as { status?: number }).status;
+          const retryable = !acc && attempt < 2 && status !== undefined && status >= 500 && !signal.aborted;
+          if (!retryable) throw e;
+          attempt++;
+          set({ statusNote: `Модель перегружена, пробую снова (${attempt}/2)…` });
+          await new Promise((r) => setTimeout(r, attempt * 2500));
+          if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        }
       }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
@@ -174,6 +194,7 @@ export const useChat = create<ChatState>((set, get) => {
     } finally {
       if (raf) cancelAnimationFrame(raf);
       abortCtl = null;
+      set({ statusNote: null });
     }
 
     if (!acc) {
@@ -198,6 +219,7 @@ export const useChat = create<ChatState>((set, get) => {
     path: [],
     streamingId: null,
     streamText: '',
+    statusNote: null,
     error: null,
 
     async init() {
@@ -271,6 +293,13 @@ export const useChat = create<ChatState>((set, get) => {
       const last = messages[path[path.length - 1]];
       if (streamingId || !last || last.role !== 'assistant') return;
       await runGeneration(last.parentId);
+    },
+
+    async retry() {
+      const { path, messages, streamingId } = get();
+      const last = messages[path[path.length - 1]];
+      if (streamingId || !last || last.role !== 'user') return;
+      await runGeneration(last.id);
     },
 
     async swipe(messageId, dir) {

@@ -28,18 +28,43 @@ export async function* readSSE(res: Response): AsyncGenerator<string> {
   }
 }
 
+/** Ошибка HTTP с кодом статуса: по нему решаем, стоит ли повторять запрос. */
+export class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export async function throwHttpError(res: Response): Promise<never> {
   let detail = '';
   try {
-    detail = (await res.text()).slice(0, 400);
+    const raw = (await res.text()).slice(0, 2000);
+    try {
+      detail = JSON.parse(raw)?.error?.message ?? raw;
+    } catch {
+      detail = raw;
+    }
   } catch {
     /* ignore */
   }
+  detail = String(detail).slice(0, 300);
+
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`Ключ отклонён (${res.status}). Проверь API-ключ. ${detail}`);
+    throw new HttpError(res.status, `Ключ отклонён (${res.status}). Проверь API-ключ.\n${detail}`);
+  }
+  if (res.status === 404) {
+    throw new HttpError(res.status, `Модель не найдена (404). Выбери другую в ⚙ через «Выбрать из списка моделей».\n${detail}`);
   }
   if (res.status === 429) {
-    throw new Error(`Лимит запросов исчерпан (429). Подожди или смени модель. ${detail}`);
+    throw new HttpError(
+      res.status,
+      `Лимит запросов (429). Возможно, у этой модели нет бесплатной квоты на твоём ключе, или включён поиск Google (выключи его в ⚙). Подожди или выбери другую модель.\n${detail}`,
+    );
   }
-  throw new Error(`Ошибка API ${res.status}: ${detail}`);
+  if (res.status >= 500) {
+    throw new HttpError(res.status, `Модель перегружена или недоступна (${res.status}). Это временно: нажми «Повторить» или выбери другую модель.\n${detail}`);
+  }
+  throw new HttpError(res.status, `Ошибка API ${res.status}: ${detail}`);
 }

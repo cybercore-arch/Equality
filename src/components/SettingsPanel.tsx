@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { GUIDES } from '../guides';
 import { useSettings } from '../store/settings';
+import { ModelPicker } from './ModelPicker';
 
 const GUIDE_LIST = Object.values(GUIDES).filter((g) => g.link);
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const { providers, activeProvider, updateProvider, setActiveProvider } = useSettings();
+  const { providers, activeProvider, updateProvider, setActiveProvider, searchEnabled, setSearchEnabled } = useSettings();
   const [guide, setGuide] = useState<number | null>(0);
 
   return (
@@ -41,6 +42,16 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           </div>
         ))}
 
+        <label className="mt-4 flex items-start gap-3 rounded-xl bg-zinc-800/60 p-3 text-sm">
+          <input type="checkbox" checked={searchEnabled} onChange={(e) => setSearchEnabled(e.target.checked)} className="mt-1" />
+          <span>
+            Поиск Google в режиме «Общение»
+            <span className="block text-xs text-zinc-500">
+              Только для Gemini. На бесплатных ключах часто недоступен и даёт ошибку 429.
+            </span>
+          </span>
+        </label>
+
         <div className="mt-4 space-y-3">
           {providers.map((p) => (
             <div key={p.id} className={`rounded-xl border p-3 ${p.id === activeProvider ? 'border-fg/60' : 'border-zinc-800'}`}>
@@ -70,6 +81,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 placeholder="Модель"
                 className="mt-2 w-full rounded-lg bg-zinc-800 px-3 py-2 text-sm outline-none"
               />
+              <ModelPicker cfg={p} onPick={(id) => updateProvider(p.id, { model: id })} />
             </div>
           ))}
         </div>
