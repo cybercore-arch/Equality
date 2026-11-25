@@ -35,6 +35,13 @@ jobs:
       - name: Синхронизация
         run: npx cap sync android
 
+      # Постоянный ключ подписи: без него каждая сборка получает новую подпись,
+      # и Android не даёт установить обновление поверх прошлой версии.
+      - name: Постоянная подпись
+        run: |
+          mkdir -p ~/.android
+          cp signing/debug.keystore ~/.android/debug.keystore
+
       - name: Сборка APK
         working-directory: android
         run: ./gradlew assembleDebug
