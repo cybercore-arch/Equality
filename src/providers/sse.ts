@@ -42,7 +42,11 @@ export async function throwHttpError(res: Response): Promise<never> {
   try {
     const raw = (await res.text()).slice(0, 2000);
     try {
-      detail = JSON.parse(raw)?.error?.message ?? raw;
+      const err = JSON.parse(raw)?.error;
+      detail = err?.message ?? raw;
+      // У OpenRouter настоящая причина часто лежит в metadata.raw («Provider returned error» ничего не объясняет)
+      const extra = err?.metadata?.raw;
+      if (extra) detail += `\n${typeof extra === 'string' ? extra : JSON.stringify(extra)}`;
     } catch {
       detail = raw;
     }
@@ -58,9 +62,12 @@ export async function throwHttpError(res: Response): Promise<never> {
     throw new HttpError(res.status, `Модель не найдена (404). Выбери другую в ⚙ через «Выбрать из списка моделей».\n${detail}`);
   }
   if (res.status === 429) {
+    const gemini = res.url.includes('generativelanguage');
     throw new HttpError(
       res.status,
-      `Лимит запросов (429). Возможно, у этой модели нет бесплатной квоты на твоём ключе, или включён поиск Google (выключи его в ⚙). Подожди или выбери другую модель.\n${detail}`,
+      `Лимит запросов (429). Бесплатный лимит этой модели исчерпан или она перегружена. Подожди минуту и нажми «Повторить» или выбери другую модель в ⚙.` +
+        (gemini ? ' Для Gemini также выключи поиск Google в ⚙: на бесплатных ключах он часто недоступен.' : '') +
+        `\n${detail}`,
     );
   }
   if (res.status >= 500) {
