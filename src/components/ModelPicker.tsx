@@ -1,11 +1,19 @@
 import { useState } from 'react';
+import { formatContext } from '../lib/tokens';
 import { listModels } from '../providers/models';
-import type { ProviderConfig } from '../types';
+import type { ModelInfo, ProviderConfig } from '../types';
 
 /** Кнопка «Выбрать из списка»: загружает актуальные модели провайдера и даёт отфильтровать по тексту. */
-export function ModelPicker({ cfg, onPick }: { cfg: ProviderConfig; onPick: (id: string) => void }) {
+export function ModelPicker({
+  cfg,
+  onPick,
+}: {
+  cfg: ProviderConfig;
+  /** Второй аргумент: размер контекста модели, если провайдер его сообщил */
+  onPick: (id: string, context?: number) => void;
+}) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<string[] | null>(null);
+  const [items, setItems] = useState<ModelInfo[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
@@ -23,7 +31,7 @@ export function ModelPicker({ cfg, onPick }: { cfg: ProviderConfig; onPick: (id:
     }
   }
 
-  const shown = (items ?? []).filter((m) => m.toLowerCase().includes(q.toLowerCase()));
+  const shown = (items ?? []).filter((m) => m.id.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="mt-2">
@@ -49,16 +57,17 @@ export function ModelPicker({ cfg, onPick }: { cfg: ProviderConfig; onPick: (id:
               <div className="max-h-48 overflow-y-auto">
                 {shown.map((m) => (
                   <button
-                    key={m}
+                    key={m.id}
                     onClick={() => {
-                      onPick(m);
+                      onPick(m.id, m.context);
                       setOpen(false);
                     }}
-                    className={`block w-full break-all rounded-lg px-2 py-1.5 text-left text-xs hover:bg-zinc-700 ${
-                      m === cfg.model ? 'text-zinc-50' : 'text-zinc-300'
+                    className={`flex w-full items-baseline justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-zinc-700 ${
+                      m.id === cfg.model ? 'text-zinc-50' : 'text-zinc-300'
                     }`}
                   >
-                    {m}
+                    <span className="min-w-0 break-all">{m.id}</span>
+                    {m.context ? <span className="shrink-0 text-zinc-500">{formatContext(m.context)}</span> : null}
                   </button>
                 ))}
                 {shown.length === 0 && <div className="px-2 py-1 text-xs text-zinc-500">Ничего не найдено</div>}

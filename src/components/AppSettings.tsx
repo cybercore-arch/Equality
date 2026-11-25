@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PROVIDER_LABEL } from '../guides';
 import { useSettings } from '../store/settings';
+import { GlobalPromptSheet } from './GlobalPromptSheet';
 import { Icon } from './Icon';
 import { SettingsPanel } from './SettingsPanel';
 import { ThemeToggle } from './ThemeToggle';
@@ -23,6 +24,8 @@ function Row({ title, hint, onClick }: { title: string; hint: string; onClick: (
 /** Настройки всего приложения: тема, оформление, подключение к ИИ. */
 export function AppSettings({ onClose, onAppearance }: { onClose: () => void; onAppearance: () => void }) {
   const [providers, setProviders] = useState(false);
+  const [prompt, setPrompt] = useState(false);
+  const globalPrompt = useSettings((s) => s.globalPrompt);
   const active = useSettings((s) => s.providers.find((p) => p.id === s.activeProvider));
 
   return (
@@ -45,16 +48,22 @@ export function AppSettings({ onClose, onAppearance }: { onClose: () => void; on
             <div className="mb-2 text-xs uppercase tracking-widest text-zinc-500">Приложение</div>
             <Row title="Оформление" hint="Цвет, фон, прозрачность, размер текста" onClick={onAppearance} />
             <Row
+              title="Общий системный промпт"
+              hint={globalPrompt.trim() ? globalPrompt.trim().replace(/\s+/g, ' ').slice(0, 60) : 'Не задан. Добавляется во все чаты'}
+              onClick={() => setPrompt(true)}
+            />
+            <Row
               title="Подключение к ИИ"
               hint={active ? `По умолчанию: ${PROVIDER_LABEL[active.id]} · ${active.model || 'модель не выбрана'}` : ''}
               onClick={() => setProviders(true)}
             />
           </section>
 
-          <p className="pt-4 text-center text-xs text-zinc-600">Equality · версия 0.3</p>
+          <p className="pt-4 text-center text-xs text-zinc-600">Equality · версия 0.4</p>
         </div>
       </div>
       {providers && <SettingsPanel onClose={() => setProviders(false)} />}
+      {prompt && <GlobalPromptSheet onClose={() => setPrompt(false)} />}
     </div>
   );
 }

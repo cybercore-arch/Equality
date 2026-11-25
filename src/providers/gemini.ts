@@ -9,7 +9,11 @@ export async function* streamGemini(cfg: ProviderConfig, p: StreamParams): Async
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     })),
-    generationConfig: { temperature: p.temperature, topP: p.topP },
+    generationConfig: {
+      temperature: p.temperature,
+      topP: p.topP,
+      ...(p.maxTokens ? { maxOutputTokens: p.maxTokens } : {}),
+    },
   };
   if (p.system) body.systemInstruction = { parts: [{ text: p.system }] };
   if (p.googleSearch) body.tools = [{ google_search: {} }];

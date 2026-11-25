@@ -45,6 +45,29 @@ export interface Chat {
   model?: string;
   /** Папка в левом меню */
   folderId?: string | null;
+
+  /** Системный промпт только этого чата (слой поверх общего и режима) */
+  systemPrompt?: string;
+  /** Выключить общий промпт из настроек / промпт режима для этого чата */
+  noGlobalPrompt?: boolean;
+  noModePrompt?: boolean;
+  /** Свои параметры чата. Если не заданы, берутся из режима */
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+  /** Поиск Google (Gemini): true/false переопределяет настройку, пусто означает «как в режиме» */
+  search?: boolean;
+  /** Размер контекста модели в токенах (из списка моделей или введён вручную) */
+  contextLimit?: number;
+  /** Выжимка старой части переписки и id последнего сообщения, которое она заменяет */
+  summary?: string;
+  summaryUpToId?: string;
+}
+
+export interface ModelInfo {
+  id: string;
+  /** Размер контекста в токенах, если провайдер его сообщил */
+  context?: number;
 }
 
 export interface Folder {
@@ -88,6 +111,8 @@ export interface StreamParams {
   temperature: number;
   topP: number;
   googleSearch: boolean;
+  /** Максимум токенов в ответе (если не задан, решает провайдер) */
+  maxTokens?: number;
   signal: AbortSignal;
   /** Провайдер сообщает точное число токенов, когда оно известно */
   onUsage?: (u: { completion?: number; prompt?: number }) => void;

@@ -16,6 +16,7 @@ export function ModelSheet({ onClose }: { onClose: () => void }) {
   const current = chat ? resolveProvider(chat, { providers, activeProvider }) : null;
   const [pid, setPid] = useState<ProviderKind>(current?.id ?? activeProvider);
   const [model, setModel] = useState(current?.model ?? '');
+  const [ctx, setCtx] = useState<number | undefined>(chat?.contextLimit);
 
   if (!chat) return null;
 
@@ -26,6 +27,7 @@ export function ModelSheet({ onClose }: { onClose: () => void }) {
   const choose = (id: ProviderKind) => {
     setPid(id);
     setModel(providers.find((p) => p.id === id)?.model ?? '');
+    setCtx(undefined);
   };
 
   return (
@@ -62,12 +64,18 @@ export function ModelSheet({ onClose }: { onClose: () => void }) {
           spellCheck={false}
           className="mt-4 w-full rounded-2xl bg-zinc-800 px-4 py-3 text-sm outline-none placeholder:text-zinc-500"
         />
-        <ModelPicker cfg={{ ...cfg, model }} onPick={setModel} />
+        <ModelPicker
+          cfg={{ ...cfg, model }}
+          onPick={(id, context) => {
+            setModel(id);
+            setCtx(context);
+          }}
+        />
 
         <div className="mt-5 flex gap-2">
           <button
             onClick={() => {
-              void updateChat(chat.id, { providerId: pid, model: model.trim() || undefined });
+              void updateChat(chat.id, { providerId: pid, model: model.trim() || undefined, contextLimit: ctx });
               onClose();
             }}
             disabled={!model.trim()}
@@ -77,7 +85,7 @@ export function ModelSheet({ onClose }: { onClose: () => void }) {
           </button>
           <button
             onClick={() => {
-              void updateChat(chat.id, { providerId: undefined, model: undefined });
+              void updateChat(chat.id, { providerId: undefined, model: undefined, contextLimit: undefined });
               onClose();
             }}
             className="rounded-2xl bg-zinc-800 px-4 py-2.5 text-sm text-zinc-300"

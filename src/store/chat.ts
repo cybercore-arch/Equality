@@ -1,16 +1,23 @@
 import { create } from 'zustand';
 import { db } from '../db/db';
-import { getMode } from '../modes';
 import { streamChat } from '../providers';
-import type { Chat, ChatMessageInput, Folder, Message, MessageStats } from '../types';
+import type { Chat, Folder, Message, MessageStats } from '../types';
+import { buildContext } from './prompt';
 import { resolveProvider } from './resolve';
 import { useSettings } from './settings';
 
 export const ROOT = '__root__';
 const NEW_TITLE = 'Новый чат';
-/** Грубая обрезка контекста по символам. Умная суммаризация — в Этапе 3B. */
-const MAX_CONTEXT_CHARS = 48_000;
 const CONTINUE_PROMPT = 'Продолжи свой предыдущий ответ ровно с того места, где он оборвался. Не повторяй уже написанное.';
+
+const SUMMARY_SYSTEM =
+  'Ты сжимаешь историю переписки, чтобы её можно было продолжить позже без потери смысла. ' +
+  'Напиши сжатую выжимку на языке переписки: ключевые факты, имена, договорённости, решения, ' +
+  'состояние сюжета или задачи, важные детали и настроение. ' +
+  'Если даны предыдущая выжимка и новые сообщения, объедини их в одну цельную выжимку. ' +
+  'Пиши от третьего лица, без вступлений и комментариев, не длиннее 400 слов.';
+/** Сколько последних сообщений остаются нетронутыми при сжатии */
+const KEEP_RECENT = 6;
 
 let abortCtl: AbortController | null = null;
 let lastTs = 0;
@@ -72,6 +79,8 @@ interface ChatState {
   streamText: string;
   /** Пояснение вместо стадии ответа, например «Модель перегружена, пробую снова» */
   statusNote: string | null;
+  /** Идёт сжатие контекста */
+  summarizing: boolean;
   error: string | null;
 
   init: () => Promise<void>;
@@ -96,6 +105,10 @@ interface ChatState {
   editMessage: (id: string, content: string) => Promise<void>;
   deleteMessage: (id: string) => Promise<void>;
   swipe: (messageId: string, dir: -1 | 1) => Promise<void>;
+  /** Сжать старую часть переписки в выжимку (сами сообщения не удаляются) */
+  summarizeContext: () => Promise<void>;
+  /** Вручную поправить текст выжимки; пустой текст сбрасывает её */
+  setSummary: (text: string) => Promise<void>;
   stop: () => void;
   clearError: () => void;
 }
@@ -139,7 +152,6 @@ export const useChat = create<ChatState>((set, get) => {
 
     const settings = useSettings.getState();
     const provider = resolveProvider(chat, settings);
-    const mode = getMode(chat.modeId ?? 'general');
 
     if (!provider.apiKey.trim() && provider.id !== 'custom') {
       set({ error: `Добавь API-ключ для «${provider.name}» в настройках.` });
@@ -150,24 +162,22 @@ export const useChat = create<ChatState>((set, get) => {
       return;
     }
 
-    // Контекст = путь до родителя включительно (без нового ответа)
-    const history = pathTo(get().messages, parentId).map((id) => get().messages[id]);
-    const input: ChatMessageInput[] = history
-      .filter((m) => m.role !== 'system' && m.content)
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-
     // Дописывание: показываем модели её же незаконченный ответ и просим продолжить
     const existing = opts.continueId ? get().messages[opts.continueId] : undefined;
-    if (existing) {
-      input.push({ role: 'assistant', content: existing.content }, { role: 'user', content: CONTINUE_PROMPT });
-    }
-
-    let total = input.reduce((n, m) => n + m.content.length, 0);
-    while (input.length > 2 && total > MAX_CONTEXT_CHARS) total -= input.shift()!.content.length;
-
-    const system = opts.instruction?.trim()
-      ? `${mode.systemPrompt}\n\n[Пожелание пользователя к этому ответу: ${opts.instruction.trim()}]`
-      : mode.systemPrompt;
+    const ctx = buildContext({
+      chat,
+      messages: get().messages,
+      path: pathTo(get().messages, parentId),
+      globalPrompt: settings.globalPrompt,
+      searchEnabled: settings.searchEnabled,
+      instruction: opts.instruction,
+      tail: existing
+        ? [
+            { role: 'assistant', content: existing.content },
+            { role: 'user', content: CONTINUE_PROMPT },
+          ]
+        : undefined,
+    });
 
     const base = existing?.content ?? '';
     const assistant: Message = existing ?? {
@@ -203,11 +213,12 @@ export const useChat = create<ChatState>((set, get) => {
       for (;;) {
         try {
           const stream = streamChat(provider, {
-            messages: input,
-            system,
-            temperature: mode.temperature,
-            topP: mode.topP,
-            googleSearch: mode.googleSearch && settings.searchEnabled && provider.id === 'gemini',
+            messages: ctx.input,
+            system: ctx.system,
+            temperature: ctx.temperature,
+            topP: ctx.topP,
+            maxTokens: ctx.maxTokens,
+            googleSearch: ctx.googleSearch && provider.id === 'gemini',
             signal,
             onUsage: (u) => {
               if (u.completion !== undefined) completionTokens = u.completion;
@@ -276,6 +287,7 @@ export const useChat = create<ChatState>((set, get) => {
     streamingId: null,
     streamText: '',
     statusNote: null,
+    summarizing: false,
     error: null,
 
     async init() {
@@ -482,6 +494,66 @@ export const useChat = create<ChatState>((set, get) => {
       const leaf = descend(children, target);
       set({ path: pathTo(messages, leaf) });
       await saveLeaf(leaf);
+    },
+
+    async summarizeContext() {
+      const chat = currentChat();
+      const { path, messages, streamingId, summarizing } = get();
+      if (!chat || streamingId || summarizing) return;
+
+      // Сжимаем всё, что ещё не сжато, кроме нескольких последних сообщений
+      const prevIdx = chat.summaryUpToId ? path.indexOf(chat.summaryUpToId) : -1;
+      const startIdx = prevIdx + 1;
+      const cutoff = path.length - 1 - KEEP_RECENT;
+      if (cutoff < startIdx + 1) {
+        set({ error: 'Пока нечего сжимать: в чате мало новых сообщений.' });
+        return;
+      }
+
+      const settings = useSettings.getState();
+      const provider = resolveProvider(chat, settings);
+      if (!provider.apiKey.trim() && provider.id !== 'custom') {
+        set({ error: `Добавь API-ключ для «${provider.name}» в настройках.` });
+        return;
+      }
+
+      const chunk = path
+        .slice(startIdx, cutoff + 1)
+        .map((id) => messages[id])
+        .filter((m) => m && m.role !== 'system' && m.content);
+      let transcript = chunk.map((m) => `${m.role === 'user' ? 'Пользователь' : 'Ассистент'}: ${m.content}`).join('\n\n');
+      if (transcript.length > 80_000) transcript = transcript.slice(-80_000);
+      const prev = prevIdx >= 0 ? (chat.summary ?? '').trim() : '';
+      const prompt = (prev ? `Предыдущая выжимка:\n${prev}\n\nНовые сообщения:\n` : 'Сообщения:\n') + transcript;
+
+      set({ summarizing: true, error: null });
+      abortCtl = new AbortController();
+      let acc = '';
+      try {
+        const stream = streamChat(provider, {
+          messages: [{ role: 'user', content: prompt }],
+          system: SUMMARY_SYSTEM,
+          temperature: 0.3,
+          topP: 0.9,
+          googleSearch: false,
+          signal: abortCtl.signal,
+        });
+        for await (const part of stream) acc += part;
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') set({ error: (e as Error).message || 'Не удалось сжать контекст' });
+      } finally {
+        abortCtl = null;
+        set({ summarizing: false });
+      }
+
+      if (acc.trim()) await get().updateChat(chat.id, { summary: acc.trim(), summaryUpToId: path[cutoff] });
+    },
+
+    async setSummary(text) {
+      const chat = currentChat();
+      if (!chat) return;
+      const t = text.trim();
+      await get().updateChat(chat.id, t ? { summary: t } : { summary: undefined, summaryUpToId: undefined });
     },
 
     stop() {

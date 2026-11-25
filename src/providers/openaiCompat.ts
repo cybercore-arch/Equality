@@ -35,6 +35,7 @@ export async function* streamOpenAICompat(
       stream: true,
       temperature: p.temperature,
       top_p: p.topP,
+      ...(p.maxTokens ? { max_tokens: p.maxTokens } : {}),
       // Просим провайдера прислать точное число токенов в конце потока (свои серверы не трогаем)
       ...(cfg.id !== 'custom' ? { stream_options: { include_usage: true } } : {}),
     }),
