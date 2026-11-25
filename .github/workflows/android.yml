@@ -42,6 +42,28 @@ jobs:
           mkdir -p ~/.android
           cp signing/debug.keystore ~/.android/debug.keystore
 
+      # Прописываем ключ в сам проект: так Gradle не сможет подставить свой случайный
+      - name: Подключение ключа подписи в Gradle
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          p = pathlib.Path('android/app/build.gradle')
+          s = p.read_text()
+          block = '''android {
+              signingConfigs {
+                  debug {
+                      storeFile file('../../signing/debug.keystore')
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
+          '''
+          s2, n = re.subn(r'^android \{\n', block, s, count=1, flags=re.M)
+          assert n == 1, 'не нашёл блок android { в build.gradle'
+          p.write_text(s2)
+          PY
+
       - name: Сборка APK
         working-directory: android
         run: ./gradlew assembleDebug
