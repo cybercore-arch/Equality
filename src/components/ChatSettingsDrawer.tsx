@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useOverlay } from '../lib/overlay';
 import { estimateTokens, formatContext } from '../lib/tokens';
 import { getMode } from '../modes';
 import { useChat } from '../store/chat';
@@ -70,7 +71,8 @@ const snippet = (t: string, n = 180) => (t.length > n ? `${t.slice(0, n)}…` : 
  * Правая панель настроек чата: режим, параметры генерации, слои системного промпта,
  * размер контекста и сжатие старой части переписки.
  */
-export function ChatSettingsDrawer({ onClose }: { onClose: () => void }) {
+export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => void }) {
+  const { closing, close: onClose } = useOverlay(onCloseProp);
   const chat = useChat((s) => s.chats.find((c) => c.id === s.chatId));
   const messages = useChat((s) => s.messages);
   const path = useChat((s) => s.path);
@@ -108,10 +110,10 @@ export function ChatSettingsDrawer({ onClose }: { onClose: () => void }) {
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
 
   return (
-    <div className="anim-fade fixed inset-0 z-40 bg-black/50" onClick={onClose}>
+    <div className={`${closing ? 'anim-fade-out' : 'anim-fade'} fixed inset-0 z-40 bg-black/50`} onClick={onClose}>
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="anim-drawer absolute inset-y-0 right-0 flex w-[min(24rem,94vw)] flex-col overflow-y-auto border-l border-fg/10 bg-zinc-900 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]"
+        className={`${closing ? 'anim-drawer-out' : 'anim-drawer'} absolute inset-y-0 right-0 flex w-[min(24rem,94vw)] flex-col overflow-y-auto border-l border-fg/10 bg-zinc-900 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))]`}
       >
         <div className="mb-4 flex items-center gap-2">
           <button onClick={onClose} className="rounded-xl p-2 text-zinc-300" aria-label="Закрыть">

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useOverlay } from '../lib/overlay';
 import { PROVIDER_LABEL } from '../guides';
 import { useChat } from '../store/chat';
 import { resolveProvider } from '../store/resolve';
@@ -7,7 +8,8 @@ import type { ProviderKind } from '../types';
 import { ModelPicker } from './ModelPicker';
 
 /** Панель, выезжающая сверху: провайдер и модель только для текущего чата. */
-export function ModelSheet({ onClose }: { onClose: () => void }) {
+export function ModelSheet({ onClose: onCloseProp }: { onClose: () => void }) {
+  const { closing, close: onClose } = useOverlay(onCloseProp);
   const chat = useChat((s) => s.chats.find((c) => c.id === s.chatId));
   const updateChat = useChat((s) => s.updateChat);
   const providers = useSettings((s) => s.providers);
@@ -31,10 +33,10 @@ export function ModelSheet({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="anim-fade fixed inset-0 z-40 bg-black/50" onClick={onClose}>
+    <div className={`${closing ? 'anim-fade-out' : 'anim-fade'} fixed inset-0 z-40 bg-black/50`} onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="anim-drop mx-auto max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-b-3xl border-b border-fg/10 bg-zinc-900 p-4 pt-[max(1rem,env(safe-area-inset-top))]"
+        className={`${closing ? 'anim-drop-out' : 'anim-drop'} mx-auto max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-b-3xl border-b border-fg/10 bg-zinc-900 p-4 pt-[max(1rem,env(safe-area-inset-top))]`}
       >
         <h2 className="font-display text-lg font-semibold">Модель для этого чата</h2>
         <p className="mt-1 text-xs text-zinc-500">Меняется только здесь. Остальные чаты используют настройки по умолчанию.</p>

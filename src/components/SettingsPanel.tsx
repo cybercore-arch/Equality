@@ -1,18 +1,20 @@
 import { useState } from 'react';
+import { useOverlay } from '../lib/overlay';
 import { GUIDES } from '../guides';
 import { useSettings } from '../store/settings';
 import { ModelPicker } from './ModelPicker';
 
 const GUIDE_LIST = Object.values(GUIDES).filter((g) => g.link);
 
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
+export function SettingsPanel({ onClose: onCloseProp }: { onClose: () => void }) {
+  const { closing, close: onClose } = useOverlay(onCloseProp);
   const { providers, activeProvider, updateProvider, setActiveProvider, searchEnabled, setSearchEnabled } = useSettings();
   const [guide, setGuide] = useState<number | null>(0);
 
   return (
-    <div className="anim-fade fixed inset-0 z-[60] flex items-end justify-center bg-black/60 md:items-center" onClick={onClose}>
+    <div className={`${closing ? 'anim-fade-out' : 'anim-fade'} fixed inset-0 z-[60] flex items-end justify-center bg-black/60 md:items-center`} onClick={onClose}>
       <div
-        className="anim-sheet max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-zinc-900 p-4 md:max-w-lg md:rounded-2xl"
+        className={`${closing ? 'anim-sheet-out' : 'anim-sheet'} max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-zinc-900 p-4 md:max-w-lg md:rounded-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">

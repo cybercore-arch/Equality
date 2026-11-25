@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useBackEntry } from '../lib/overlay';
 import { useChat } from '../store/chat';
 import type { Chat, Folder } from '../types';
 import { Icon } from './Icon';
@@ -16,6 +17,7 @@ export function Sidebar({
   onClose: () => void;
   onSettings: () => void;
 }) {
+  useBackEntry(open, onClose);
   const chats = useChat((s) => s.chats);
   const folders = useChat((s) => s.folders);
   const chatId = useChat((s) => s.chatId);

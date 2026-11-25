@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useOverlay } from '../lib/overlay';
 import { PROVIDER_LABEL } from '../guides';
 import { useSettings } from '../store/settings';
 import { GlobalPromptSheet } from './GlobalPromptSheet';
@@ -22,14 +23,15 @@ function Row({ title, hint, onClick }: { title: string; hint: string; onClick: (
 }
 
 /** Настройки всего приложения: тема, оформление, подключение к ИИ. */
-export function AppSettings({ onClose, onAppearance }: { onClose: () => void; onAppearance: () => void }) {
+export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: () => void; onAppearance: () => void }) {
+  const { closing, close: onClose } = useOverlay(onCloseProp);
   const [providers, setProviders] = useState(false);
   const [prompt, setPrompt] = useState(false);
   const globalPrompt = useSettings((s) => s.globalPrompt);
   const active = useSettings((s) => s.providers.find((p) => p.id === s.activeProvider));
 
   return (
-    <div className="anim-fade fixed inset-0 z-50 overflow-y-auto bg-zinc-950">
+    <div className={`${closing ? 'anim-page-out' : 'anim-page'} fixed inset-0 z-50 overflow-y-auto bg-zinc-950`}>
       <div className="mx-auto w-full max-w-md px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
         <div className="mb-5 flex items-center gap-2">
           <button onClick={onClose} className="rounded-xl p-2 text-zinc-300" aria-label="Назад">

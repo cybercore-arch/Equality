@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useOverlay } from '../lib/overlay';
 import { useTheme } from '../store/theme';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -39,13 +40,14 @@ const px = (v: number) => `${v}px`;
 /**
  * Нижняя панель без затемнения: меняешь ползунок — сразу видишь результат в чате сверху.
  */
-export function AppearancePanel({ onClose }: { onClose: () => void }) {
+export function AppearancePanel({ onClose: onCloseProp }: { onClose: () => void }) {
+  const { closing, close: onClose } = useOverlay(onCloseProp);
   const t = useTheme();
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState('');
 
   return (
-    <div className="anim-sheet fixed inset-x-0 bottom-0 z-[60] mx-auto max-h-[58dvh] overflow-y-auto rounded-t-2xl border border-zinc-800 bg-zinc-900/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur md:max-w-md">
+    <div className={`${closing ? 'anim-sheet-out' : 'anim-sheet'} fixed inset-x-0 bottom-0 z-[60] mx-auto max-h-[58dvh] overflow-y-auto rounded-t-2xl border border-zinc-800 bg-zinc-900/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur md:max-w-md`}>
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Оформление</h2>
         <div className="flex items-center gap-3 text-sm">

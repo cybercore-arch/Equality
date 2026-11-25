@@ -114,6 +114,12 @@ body {
   from { transform: translateX(100%); }
   to { transform: none; }
 }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes sheet-out { to { opacity: 0; transform: translateY(28px); } }
+@keyframes drop-out { to { opacity: 0; transform: translateY(-32px); } }
+@keyframes drawer-out { to { transform: translateX(100%); } }
+@keyframes page-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes page-out { to { opacity: 0; transform: translateX(24px); } }
 @keyframes rise {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
@@ -135,6 +141,12 @@ body {
 .anim-sheet { animation: sheet-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .anim-drop { animation: drop-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .anim-drawer { animation: drawer-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.anim-fade-out { animation: fade-out 0.22s ease both; }
+.anim-sheet-out { animation: sheet-out 0.22s ease-in both; }
+.anim-drop-out { animation: drop-out 0.22s ease-in both; }
+.anim-drawer-out { animation: drawer-out 0.22s ease-in both; }
+.anim-page { animation: page-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.anim-page-out { animation: page-out 0.22s ease-in both; }
 .anim-rise { animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
 /* Бегущий блик по тексту статуса ("Думает…") */

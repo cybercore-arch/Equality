@@ -1,17 +1,19 @@
 import { useState } from 'react';
+import { useOverlay } from '../lib/overlay';
 import { useSettings } from '../store/settings';
 
 /** Общий системный промпт: добавляется во все чаты всех режимов. */
-export function GlobalPromptSheet({ onClose }: { onClose: () => void }) {
+export function GlobalPromptSheet({ onClose: onCloseProp }: { onClose: () => void }) {
+  const { closing, close: onClose } = useOverlay(onCloseProp);
   const value = useSettings((s) => s.globalPrompt);
   const setGlobalPrompt = useSettings((s) => s.setGlobalPrompt);
   const [draft, setDraft] = useState(value);
 
   return (
-    <div className="anim-fade fixed inset-0 z-[60] flex items-end justify-center bg-black/60 md:items-center" onClick={onClose}>
+    <div className={`${closing ? 'anim-fade-out' : 'anim-fade'} fixed inset-0 z-[60] flex items-end justify-center bg-black/60 md:items-center`} onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="anim-sheet max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-zinc-900 p-4 md:max-w-lg md:rounded-2xl"
+        className={`${closing ? 'anim-sheet-out' : 'anim-sheet'} max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-zinc-900 p-4 md:max-w-lg md:rounded-2xl`}
       >
         <h2 className="font-display text-lg font-semibold">Общий системный промпт</h2>
         <p className="mt-1 text-xs text-zinc-500">
