@@ -4,7 +4,7 @@ import { useSettings } from '../store/settings';
 import type { ProviderKind } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 
-const ORDER: ProviderKind[] = ['gemini', 'openrouter', 'groq', 'custom'];
+const ORDER: ProviderKind[] = ['openrouter', 'gemini', 'groq', 'custom'];
 
 /** Печатает текст по буквам. Невидимая копия держит высоту, чтобы вёрстка не прыгала. */
 function Typewriter({ text, speed = 80 }: { text: string; speed?: number }) {

@@ -55,8 +55,8 @@ export const PROVIDER_LABEL: Record<ProviderKind, string> = {
 };
 
 export const PROVIDER_HINT: Record<ProviderKind, string> = {
-  gemini: 'бесплатно, проще всего',
-  openrouter: 'много бесплатных моделей',
+  gemini: 'бесплатно, из некоторых стран нужен VPN',
+  openrouter: 'рекомендуем: много бесплатных моделей',
   groq: 'очень быстро',
   custom: 'любой OpenAI-совместимый',
 };

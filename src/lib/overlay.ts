@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -8,14 +9,27 @@ type Entry = { close: () => void };
 const stack: Entry[] = [];
 let skip = 0; // сколько popstate вызвано нами самими (при закрытии кнопкой) и не должно ничего закрывать
 
+// В Android-приложении жест «назад» ловим через плагин, в браузере — через историю
+const native = Capacitor.isNativePlatform();
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('popstate', () => {
-    if (skip > 0) {
-      skip--;
-      return;
-    }
-    stack.pop()?.close();
-  });
+  if (native) {
+    void import('@capacitor/app').then(({ App }) => {
+      void App.addListener('backButton', () => {
+        const top = stack.pop();
+        if (top) top.close();
+        else void App.exitApp();
+      });
+    });
+  } else {
+    window.addEventListener('popstate', () => {
+      if (skip > 0) {
+        skip--;
+        return;
+      }
+      stack.pop()?.close();
+    });
+  }
 }
 
 export function useBackEntry(active: boolean, close: () => void) {
@@ -25,14 +39,16 @@ export function useBackEntry(active: boolean, close: () => void) {
     if (!active) return;
     const entry: Entry = { close: () => ref.current() };
     stack.push(entry);
-    history.pushState({ eq: stack.length }, '');
+    if (!native) history.pushState({ eq: stack.length }, '');
     return () => {
       const i = stack.indexOf(entry);
       if (i >= 0) {
         // закрыто не жестом, а кнопкой: убираем свою запись из истории
         stack.splice(i, 1);
-        skip++;
-        history.back();
+        if (!native) {
+          skip++;
+          history.back();
+        }
       }
     };
   }, [active]);

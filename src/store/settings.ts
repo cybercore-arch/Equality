@@ -41,7 +41,7 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       providers: DEFAULT_PROVIDERS,
-      activeProvider: 'gemini',
+      activeProvider: 'openrouter',
       modeId: 'general',
       onboarded: false,
       setOnboarded: (v) => set({ onboarded: v }),
