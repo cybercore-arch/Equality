@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import { useChat } from '../store/chat';
 import { MessageItem } from './MessageItem';
+import { ModePicker } from './ModePicker';
 
 function greeting() {
   const h = new Date().getHours();
@@ -11,14 +12,22 @@ function greeting() {
   return 'Доброй ночи';
 }
 
-/** Приветствие на пустом чате. */
+/** Пустой чат: приветствие и аккуратный выбор режима (только пока в чате нет сообщений). */
 function EmptyState() {
+  const chat = useChat((s) => s.chats.find((c) => c.id === s.chatId));
+  const setChatMode = useChat((s) => s.setChatMode);
   return (
-    <div className="mx-auto flex h-full w-full max-w-md flex-col justify-center px-8">
+    <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center px-6 py-8">
       <h2 className="anim-rise font-display text-3xl font-semibold tracking-tight">{greeting()}</h2>
       <p className="anim-rise mt-2 text-zinc-400" style={{ animationDelay: '150ms' }}>
         С чего начнём?
       </p>
+      {chat && (
+        <div className="anim-rise mt-7" style={{ animationDelay: '300ms' }}>
+          <div className="mb-2 text-xs uppercase tracking-widest text-zinc-500">Режим</div>
+          <ModePicker value={chat.modeId ?? 'general'} onChange={(id) => void setChatMode(chat.id, id)} />
+        </div>
+      )}
     </div>
   );
 }

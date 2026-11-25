@@ -25,6 +25,8 @@ export async function* streamGemini(cfg: ProviderConfig, p: StreamParams): Async
   for await (const data of readSSE(res)) {
     try {
       const json = JSON.parse(data);
+      const usage = json.usageMetadata;
+      if (usage) p.onUsage?.({ completion: usage.candidatesTokenCount, prompt: usage.promptTokenCount });
       const parts: { text?: string }[] = json.candidates?.[0]?.content?.parts ?? [];
       for (const part of parts) if (part.text) yield part.text;
     } catch {

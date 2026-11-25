@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useChat } from '../store/chat';
+import { Icon } from './Icon';
 
 export function Composer() {
   const [text, setText] = useState('');
@@ -62,16 +63,17 @@ export function Composer() {
           className="max-h-40 min-h-[42px] flex-1 resize-none field rounded-2xl px-4 py-2.5 text-[15px] outline-none placeholder:text-zinc-500"
         />
         {busy ? (
-          <button onClick={stop} className="h-[42px] rounded-2xl bg-zinc-700 px-4 text-sm">
-            Стоп
+          <button onClick={stop} className="flex h-[42px] w-[46px] items-center justify-center rounded-2xl bg-zinc-700" aria-label="Остановить">
+            <Icon name="stop" size={18} />
           </button>
         ) : (
           <button
             onClick={submit}
             disabled={!text.trim()}
-            className="btn-accent h-[42px] rounded-2xl px-4 text-sm font-medium disabled:opacity-40"
+            className="btn-accent flex h-[42px] w-[46px] items-center justify-center rounded-2xl disabled:opacity-40"
+            aria-label="Отправить"
           >
-            ➤
+            <Icon name="send" size={20} />
           </button>
         )}
       </div>

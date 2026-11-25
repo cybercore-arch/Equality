@@ -10,7 +10,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [guide, setGuide] = useState<number | null>(0);
 
   return (
-    <div className="anim-fade fixed inset-0 z-40 flex items-end justify-center bg-black/60 md:items-center" onClick={onClose}>
+    <div className="anim-fade fixed inset-0 z-[60] flex items-end justify-center bg-black/60 md:items-center" onClick={onClose}>
       <div
         className="anim-sheet max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-zinc-900 p-4 md:max-w-lg md:rounded-2xl"
         onClick={(e) => e.stopPropagation()}

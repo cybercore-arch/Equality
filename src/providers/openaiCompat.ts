@@ -35,6 +35,8 @@ export async function* streamOpenAICompat(
       stream: true,
       temperature: p.temperature,
       top_p: p.topP,
+      // Просим провайдера прислать точное число токенов в конце потока (свои серверы не трогаем)
+      ...(cfg.id !== 'custom' ? { stream_options: { include_usage: true } } : {}),
     }),
   });
   if (!res.ok) await throwHttpError(res);
@@ -44,6 +46,7 @@ export async function* streamOpenAICompat(
     try {
       const json = JSON.parse(data);
       if (json.error) throw new Error(json.error.message ?? 'Ошибка провайдера');
+      if (json.usage) p.onUsage?.({ completion: json.usage.completion_tokens, prompt: json.usage.prompt_tokens });
       const delta: string | undefined = json.choices?.[0]?.delta?.content;
       if (delta) yield delta;
     } catch (e) {

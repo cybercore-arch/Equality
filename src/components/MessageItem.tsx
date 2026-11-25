@@ -2,6 +2,8 @@ import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ROOT, useChat } from '../store/chat';
+import type { MessageStats } from '../types';
+import { Icon, type IconName } from './Icon';
 
 function CodeBlock({ className, children }: { className?: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false);
@@ -11,7 +13,7 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
   if (!isBlock) return <code>{children}</code>;
 
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
+    <div className="my-2 max-w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
       <div className="flex items-center justify-between bg-zinc-800/70 px-3 py-1 text-xs text-zinc-400">
         <span>{lang ?? 'code'}</span>
         <button
@@ -25,12 +27,23 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
           {copied ? 'Скопировано' : 'Копировать'}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 text-sm">
+      {/* Прокручивается только это окошко, а не всё сообщение */}
+      <pre className="max-w-full overflow-x-auto p-3 text-sm">
         <code>{text}</code>
       </pre>
     </div>
   );
 }
+
+const Markdown = memo(function Markdown({ text }: { text: string }) {
+  return (
+    <div className="md min-w-0 max-w-full break-words">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: CodeBlock, pre: ({ children }) => <>{children}</> }}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+});
 
 const STAGES = [
   { from: 0, label: 'Читает' },
@@ -70,15 +83,43 @@ function StatusLine() {
   );
 }
 
-const Markdown = memo(function Markdown({ text }: { text: string }) {
+const sec = (ms: number) => `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} с`;
+
+function StatsLine({ s }: { s: MessageStats }) {
   return (
-    <div className="md break-words">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: CodeBlock, pre: ({ children }) => <>{children}</> }}>
-        {text}
-      </ReactMarkdown>
-    </div>
+    <span>
+      {sec(s.ttftMs)} до ответа · {sec(s.totalMs)} всего · {s.approx ? '≈' : ''}
+      {s.tokens} ток.
+    </span>
   );
-});
+}
+
+function Chip({
+  icon,
+  label,
+  onClick,
+  disabled,
+  danger,
+}: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-1 rounded-full bg-zinc-800/80 px-2.5 py-1 text-xs transition-colors enabled:hover:bg-zinc-700 disabled:opacity-30 ${
+        danger ? 'text-red-300' : 'text-zinc-300'
+      }`}
+    >
+      <Icon name={icon} size={14} />
+      {label}
+    </button>
+  );
+}
 
 /**
  * Каждое сообщение подписано только на СВОИ данные.
@@ -92,8 +133,19 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
   const busy = useChat((s) => s.streamingId !== null);
   const swipe = useChat((s) => s.swipe);
   const regenerate = useChat((s) => s.regenerate);
+  const retry = useChat((s) => s.retry);
+  const continueMessage = useChat((s) => s.continueMessage);
+  const editMessage = useChat((s) => s.editMessage);
+  const deleteMessage = useChat((s) => s.deleteMessage);
+
   // Анимируем только свежие сообщения, а не те, что появились при прокрутке старой истории
   const fresh = useRef(m ? Date.now() - m.createdAt < 1500 : false).current;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [showMore, setShowMore] = useState(false);
+  const [wish, setWish] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   if (!m) return null;
   const isUser = m.role === 'user';
@@ -101,14 +153,46 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
   const text = streaming ? streamText : m.content;
   const idx = sibs ? sibs.indexOf(id) : 0;
   const count = sibs?.length ?? 1;
+  const showActions = !streaming && !editing && (isLast || showMore);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(m.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* буфер обмена недоступен */
+    }
+  };
+
+  const saveEdit = () => {
+    void editMessage(id, draft);
+    setEditing(false);
+  };
 
   return (
     <div className={`flex px-3 py-1.5 ${isUser ? 'justify-end' : 'justify-start'} ${fresh ? 'anim-msg' : ''}`}>
-      <div className={`max-w-[92%] md:max-w-[75%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
-        <div
-          className={`bubble px-3.5 py-2 leading-relaxed ${isUser ? 'bubble-user' : 'bubble-ai'}`}
-        >
-          {streaming ? (
+      <div className={`flex min-w-0 flex-col ${editing ? 'w-[92%]' : 'max-w-[92%] md:max-w-[75%]'} ${isUser ? 'items-end' : 'items-start'}`}>
+        <div className={`bubble min-w-0 max-w-full px-3.5 py-2 leading-relaxed ${editing ? 'w-full' : ''} ${isUser ? 'bubble-user' : 'bubble-ai'}`}>
+          {editing ? (
+            <>
+              <textarea
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={Math.min(12, draft.split('\n').length + 1)}
+                className="w-full resize-none bg-transparent outline-none"
+              />
+              <div className="mt-2 flex gap-2">
+                <button onClick={saveEdit} className="rounded-full bg-fg/15 px-3 py-1 text-xs">
+                  Сохранить
+                </button>
+                <button onClick={() => setEditing(false)} className="rounded-full px-3 py-1 text-xs opacity-70">
+                  Отмена
+                </button>
+              </div>
+            </>
+          ) : streaming ? (
             text ? (
               <div className="caret whitespace-pre-wrap break-words">{text}</div>
             ) : (
@@ -121,27 +205,83 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
           )}
         </div>
 
-        {!isUser && !streaming && (
-          <div className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
-            {count > 1 && (
+        {!streaming && !editing && (
+          <div className={`mt-1 flex max-w-full flex-wrap items-center gap-x-1 text-xs text-zinc-500 ${isUser ? 'justify-end' : ''}`}>
+            {!isUser && count > 1 && (
               <>
-                <button disabled={busy || idx <= 0} onClick={() => swipe(id, -1)} className="px-1.5 py-0.5 enabled:hover:text-zinc-200 disabled:opacity-30">
-                  ◀
+                <button disabled={busy || idx <= 0} onClick={() => swipe(id, -1)} className="p-1 enabled:hover:text-zinc-200 disabled:opacity-30" aria-label="Предыдущий вариант">
+                  <Icon name="left" size={14} />
                 </button>
                 <span>
                   {idx + 1}/{count}
                 </span>
-                <button disabled={busy || idx >= count - 1} onClick={() => swipe(id, 1)} className="px-1.5 py-0.5 enabled:hover:text-zinc-200 disabled:opacity-30">
-                  ▶
+                <button disabled={busy || idx >= count - 1} onClick={() => swipe(id, 1)} className="p-1 enabled:hover:text-zinc-200 disabled:opacity-30" aria-label="Следующий вариант">
+                  <Icon name="right" size={14} />
                 </button>
               </>
             )}
-            {isLast && (
-              <button disabled={busy} onClick={regenerate} className="px-1.5 py-0.5 enabled:hover:text-zinc-200 disabled:opacity-30" title="Другой вариант ответа">
-                ⟳
+            {!isUser && m.stats && <StatsLine s={m.stats} />}
+            {!isLast && (
+              <button onClick={() => setShowMore((v) => !v)} className="rounded p-1 hover:text-zinc-200" aria-label="Действия">
+                <Icon name="more" size={16} />
               </button>
             )}
           </div>
+        )}
+
+        {showActions && (
+          <div className="anim-fade mt-1 flex flex-wrap gap-1.5">
+            {isLast && !isUser && (
+              <>
+                <Chip icon="refresh" label="Заново" disabled={busy} onClick={() => void regenerate()} />
+                <Chip icon="edit" label="С пожеланием" disabled={busy} onClick={() => setWish(wish === null ? '' : null)} />
+              </>
+            )}
+            {isLast && isUser && <Chip icon="refresh" label="Ответить" disabled={busy} onClick={() => void retry()} />}
+            <Chip icon={copied ? 'check' : 'copy'} label={copied ? 'Скопировано' : 'Копировать'} onClick={() => void copy()} />
+            {isLast && !isUser && <Chip icon="forward" label="Продолжить" disabled={busy} onClick={() => void continueMessage(id)} />}
+            <Chip
+              icon="edit"
+              label="Править"
+              disabled={busy}
+              onClick={() => {
+                setDraft(m.content);
+                setEditing(true);
+                setShowMore(false);
+              }}
+            />
+            <Chip
+              icon="trash"
+              label="Удалить"
+              danger
+              disabled={busy}
+              onClick={() => {
+                if (confirm('Удалить это сообщение и всё, что идёт после него в этой ветке?')) void deleteMessage(id);
+              }}
+            />
+          </div>
+        )}
+
+        {wish !== null && showActions && (
+          <form
+            className="anim-fade mt-2 flex w-full gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void regenerate(wish);
+              setWish(null);
+            }}
+          >
+            <input
+              autoFocus
+              value={wish}
+              onChange={(e) => setWish(e.target.value)}
+              placeholder="Что изменить в ответе?"
+              className="field min-w-0 flex-1 rounded-full px-4 py-2 text-sm outline-none placeholder:text-zinc-500"
+            />
+            <button type="submit" disabled={!wish.trim()} className="btn-accent rounded-full px-4 text-sm disabled:opacity-30">
+              Ок
+            </button>
+          </form>
         )}
       </div>
     </div>
