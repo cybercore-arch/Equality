@@ -8,7 +8,7 @@ import type { ProviderConfig, ProviderKind } from '../types';
  * Названия моделей меняются у провайдеров — их можно править прямо в настройках.
  */
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  { id: 'gemini', name: 'Google Gemini', apiKey: '', model: 'gemini-2.5-flash' },
+  { id: 'gemini', name: 'Google Gemini', apiKey: '', model: 'gemini-3.8-flash' },
   {
     id: 'openrouter',
     name: 'OpenRouter',
@@ -44,6 +44,19 @@ export const useSettings = create<SettingsState>()(
       setActiveProvider: (id) => set({ activeProvider: id }),
       setMode: (id) => set({ modeId: id }),
     }),
-    { name: 'settings-v1' },
+    {
+      name: 'settings-v1',
+      version: 2,
+      // Версия 2: Google отключил gemini-2.5-flash, заменяем старое значение у тех, кто его не менял
+      migrate: (persisted, version) => {
+        const state = persisted as { providers?: ProviderConfig[] };
+        if (version < 2 && state.providers) {
+          state.providers = state.providers.map((p) =>
+            p.id === 'gemini' && p.model === 'gemini-2.5-flash' ? { ...p, model: 'gemini-3.8-flash' } : p,
+          );
+        }
+        return state as SettingsState;
+      },
+    },
   ),
 );
