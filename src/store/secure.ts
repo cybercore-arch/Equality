@@ -7,6 +7,9 @@ import { Capacitor } from '@capacitor/core';
  */
 export const isNative = Capacitor.isNativePlatform();
 
+/** На каком шаге остановилась проверка (нужно, чтобы понять, где хранилище зависает) */
+export let secureStage = '';
+
 async function plugin() {
   return (await import('capacitor-secure-storage-plugin')).SecureStoragePlugin;
 }
@@ -30,10 +33,15 @@ export async function secureSet(key: string, value: string): Promise<void> {
 export async function secureWorks(): Promise<{ ok: boolean; error?: string }> {
   if (!isNative) return { ok: false };
   try {
-    await secureSet('probe', 'ok');
+    secureStage = 'загрузка плагина';
+    const p = await plugin();
+    secureStage = 'запись';
+    await p.set({ key: 'probe', value: 'ok' });
+    secureStage = 'чтение';
     const ok = (await secureGet('probe')) === 'ok';
+    secureStage = '';
     return ok ? { ok } : { ok, error: 'пробное значение не прочиталось' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: `${secureStage}: ${e instanceof Error ? e.message : String(e)}` };
   }
 }

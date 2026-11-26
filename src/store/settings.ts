@@ -2,7 +2,24 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CATALOG } from '../providers/catalog';
 import type { ProviderConfig, ProviderKind } from '../types';
-import { secureGet, secureSet, secureWorks } from './secure';
+import { isNative, secureGet, secureSet, secureStage, secureWorks } from './secure';
+
+/** Запоминаем, что хранилище на этом телефоне не работает, чтобы не ждать его при каждом запуске */
+const FLAG = 'secure-state';
+const readFlag = () => {
+  try {
+    return localStorage.getItem(FLAG);
+  } catch {
+    return null;
+  }
+};
+const writeFlag = (v: string) => {
+  try {
+    localStorage.setItem(FLAG, v);
+  } catch {
+    /* без флага просто проверим ещё раз */
+  }
+};
 
 /**
  * ВАЖНО: на Этапе 1 ключи лежат в localStorage (открытым текстом).
@@ -57,9 +74,14 @@ export const useSettings = create<SettingsState>()(
       keysReady: false,
       secure: null,
       async initKeys() {
+        if (isNative && readFlag() === 'broken') {
+          set({ keysReady: true, secure: { ok: false, error: 'на этом телефоне недоступно' } });
+          return;
+        }
         const run = async () => {
           const probe = await secureWorks();
           if (!probe.ok) {
+            if (probe.error) writeFlag('broken');
             set({ keysReady: true, secure: probe.error ? { ok: false, error: probe.error } : null });
             return;
           }
@@ -74,6 +96,7 @@ export const useSettings = create<SettingsState>()(
           );
           savedKeys = Object.fromEntries(next.map((p) => [p.id, p.apiKey]));
           secureOk = true;
+          writeFlag('ok');
           set({ providers: next, keysReady: true, secure: { ok: true } }); // заодно перезаписывает localStorage уже без ключей
           useSettings.subscribe((st) => {
             for (const p of st.providers) {
@@ -85,11 +108,12 @@ export const useSettings = create<SettingsState>()(
           });
         };
         // Если хранилище сломалось или молчит, приложение всё равно запускается, а ключи остаются как раньше
-        const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('хранилище не отвечает')), 5000));
+        const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`хранилище не отвечает, шаг: ${secureStage || 'после проверки'}`)), 2500));
         try {
           await Promise.race([run(), timeout]);
         } catch (e) {
           secureOk = false;
+          writeFlag('broken');
           set({ keysReady: true, secure: { ok: false, error: e instanceof Error ? e.message : String(e) } });
         }
       },

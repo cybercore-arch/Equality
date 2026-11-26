@@ -106,7 +106,8 @@ interface ChatState {
   startWithCharacter: (characterId: string, personaId?: string) => Promise<void>;
   /** Ветка: копия переписки до выбранного сообщения в новом чате */
   forkFrom: (messageId: string) => Promise<void>;
-  send: (text: string, attachments?: Attachment[], widgetOps?: WidgetOp[]) => Promise<void>;
+  /** reply: false — только добавить сообщение, модель ответит позже, когда пользователь попросит */
+  send: (text: string, attachments?: Attachment[], widgetOps?: WidgetOp[], opts?: { reply?: boolean }) => Promise<void>;
   regenerate: (instruction?: string) => Promise<void>;
   /** Повторить запрос, если на последнее сообщение пользователя не пришёл ответ */
   retry: () => Promise<void>;
@@ -503,7 +504,7 @@ export const useChat = create<ChatState>((set, get) => {
       if (msgs[0]) set((st) => ({ path: pathTo(st.messages, msgs[0].id) }));
     },
 
-    async send(text, attachments, widgetOps) {
+    async send(text, attachments, widgetOps, opts) {
       const body = text.trim();
       const chat = currentChat();
       if ((!body && !attachments?.length) || !chat || get().streamingId) return;
@@ -522,7 +523,7 @@ export const useChat = create<ChatState>((set, get) => {
       putMessage(user);
       await db.messages.put(user);
       await saveLeaf(user.id, chat.title === NEW_TITLE ? { title: (body || attachments?.[0]?.name || NEW_TITLE).slice(0, 40) } : {});
-      await runGeneration(user.id);
+      if (opts?.reply !== false) await runGeneration(user.id);
     },
 
     /** Новый вариант ответа ("свайп"): создаём соседа последнего ответа ИИ */

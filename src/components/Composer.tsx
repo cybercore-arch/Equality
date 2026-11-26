@@ -29,15 +29,26 @@ export function Composer() {
   const retry = useChat((s) => s.retry);
   const canRetry = useChat((s) => s.messages[s.path[s.path.length - 1]]?.role === 'user');
 
-  const submit = () => {
-    if ((!text.trim() && !files.length) || busy) return;
+  const pending = useChat((s) => {
+    let n = 0;
+    for (let i = s.path.length - 1; i >= 0 && s.messages[s.path[i]]?.role === 'user'; i--) n++;
+    return n;
+  });
+  const empty = !text.trim() && !files.length;
+
+  const submit = (reply = true) => {
+    if (empty && reply && pending > 0 && !busy) {
+      void retry(); // пустое поле + есть сообщения без ответа: просто просим модель ответить
+      return;
+    }
+    if (empty || busy) return;
     const value = text;
     const attached = files;
     setText('');
     setFiles([]);
     setFileError('');
     if (ref.current) ref.current.style.height = 'auto';
-    void send(value, attached);
+    void send(value, attached, undefined, { reply });
   };
 
   const addFiles = async (list: FileList | null) => {
@@ -124,6 +135,11 @@ export function Composer() {
           ))}
         </div>
       )}
+      {pending > 0 && !busy && (
+        <div className="mb-1.5 px-1 text-xs text-zinc-500">
+          Без ответа: {pending}. Нажми ➤, и модель ответит на всё сразу.
+        </div>
+      )}
       <div className="flex items-end gap-2">
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => void addFiles(e.target.files)} />
         {chat?.widgets?.some((w) => w !== 'status') && (
@@ -167,14 +183,26 @@ export function Composer() {
             <Icon name="stop" size={18} />
           </button>
         ) : (
+          <>
+            {!empty && (
+              <button
+                onClick={() => submit(false)}
+                className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-300"
+                aria-label="Добавить сообщение без ответа"
+                title="Добавить без ответа: модель ответит позже, на всё сразу"
+              >
+                <Icon name="queue" />
+              </button>
+            )}
           <button
-            onClick={submit}
-            disabled={!text.trim() && !files.length}
+            onClick={() => submit()}
+            disabled={empty && pending === 0}
             className="btn-accent flex h-[42px] w-[46px] items-center justify-center rounded-2xl disabled:opacity-40"
             aria-label="Отправить"
           >
             <Icon name="send" size={20} />
           </button>
+          </>
         )}
       </div>
     </div>

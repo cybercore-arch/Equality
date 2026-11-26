@@ -92,7 +92,7 @@ export function buildContext(args: {
     }
   }
 
-  const input: ChatMessageInput[] = history
+  const raw: ChatMessageInput[] = history
     .filter((m) => m.role !== 'system' && (m.content || m.attachments?.length))
     .map((m) => {
       const images = (m.attachments ?? []).filter((a) => a.kind === 'image' && a.data).map((a) => ({ mime: a.mime, data: a.data! }));
@@ -102,7 +102,16 @@ export function buildContext(args: {
         ...(images.length ? { images } : {}),
       };
     });
-  if (tail) input.push(...tail);
+  if (tail) raw.push(...tail);
+  // Несколько сообщений подряд от одного автора (например, из телефона и из чата) склеиваем в одно: так требуют некоторые провайдеры
+  const input: ChatMessageInput[] = [];
+  for (const m of raw) {
+    const last = input[input.length - 1];
+    if (last && last.role === m.role) {
+      last.content = [last.content, m.content].filter(Boolean).join('\n\n');
+      if (m.images?.length) last.images = [...(last.images ?? []), ...m.images];
+    } else input.push({ ...m });
+  }
 
   let total = input.reduce((n, m) => n + m.content.length, 0);
   // Страховочная обрезка: если контекст модели большой, запас пропорционально больше

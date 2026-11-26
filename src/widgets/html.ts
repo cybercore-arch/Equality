@@ -10,7 +10,7 @@ const BASE = `
 <style>
 :root{--bg:#09090b;--fg:#fafafa;--muted:#a1a1aa;--card:#18181b;--line:#27272a;--accent:#fbbf24;--on-accent:#18181b}
 *{box-sizing:border-box}
-html,body{margin:0;background:transparent;color:var(--fg);font:14px/1.45 system-ui,-apple-system,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:transparent;color:var(--fg);font:14px/1.45 system-ui,-apple-system,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 button,input{font:inherit;color:inherit}
 button{cursor:pointer;border:0}
 input{background:var(--line);border:0;border-radius:12px;padding:9px 12px;outline:none;min-width:0;color:var(--fg)}
@@ -28,10 +28,10 @@ input::placeholder{color:var(--muted)}
 const $=(s,r=document)=>r.querySelector(s);
 function el(tag,props,...kids){const e=document.createElement(tag);for(const k in props||{}){const v=props[k];if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(k==='style')e.style.cssText=v;else e[k]=v}for(const c of kids.flat())if(c!=null)e.append(c.nodeType?c:document.createTextNode(String(c)));return e}
 const post=m=>parent.postMessage(Object.assign({eq:1},m),'*');
-let S=null,BUSY=false;
+let S=null,BUSY=false,FULL=false;
 function resize(){post({type:'resize',h:Math.ceil(document.documentElement.scrollHeight)})}
 function setTheme(t){if(!t)return;for(const k in t)document.documentElement.style.setProperty('--'+k,t[k])}
-addEventListener('message',e=>{const d=e.data;if(!d||d.eq!==1)return;setTheme(d.theme);S=d.state;BUSY=!!d.busy;render();requestAnimationFrame(resize)});
+addEventListener('message',e=>{const d=e.data;if(!d||d.eq!==1)return;setTheme(d.theme);S=d.state;BUSY=!!d.busy;FULL=!!d.full;render();requestAnimationFrame(resize)});
 new ResizeObserver(resize).observe(document.body);
 addEventListener('load',()=>post({type:'ready'}));
 </script>`;
@@ -42,6 +42,7 @@ const PHONE = `
 let cur=null,adding=false,seen={};
 function render(){
   const app=$('#app');app.textContent='';
+  app.style.cssText=FULL?'display:flex;flex-direction:column;height:100%;padding:2px 0 4px':'';
   const order=S.order.slice().reverse();
   if(!cur||(!S.threads[cur]&&!adding))cur=order[0]||null;
   const unread=c=>(S.threads[c]||[]).length!==(seen[c]||0)&&c!==cur&&(S.threads[c].slice(-1)[0]||{}).from==='them';
@@ -50,19 +51,20 @@ function render(){
     el('button',{class:'chip',onclick:()=>{adding=true;render()}},'+ Новый'));
   app.append(bar);
   if(cur)seen[cur]=(S.threads[cur]||[]).length;
+  if(FULL&&cur&&!adding)app.append(el('div',{class:'row',style:'padding:2px 4px 10px;gap:12px'},el('div',{style:'width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px'},(cur[0]||'?').toUpperCase()),el('div',{},el('b',{style:'font-size:17px'},cur),el('div',{style:'color:var(--muted);font-size:12px'},'в сети'))));
   let nameInput=null;
   if(adding){nameInput=el('input',{placeholder:'Кому написать (имя)',style:'width:100%;margin-bottom:8px'});app.append(nameInput);setTimeout(()=>nameInput.focus(),0)}
-  const thread=el('div',{style:'display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;padding:2px 0 8px'});
+  const thread=el('div',{style:FULL?'display:flex;flex-direction:column;gap:8px;flex:1;min-height:0;overflow-y:auto;padding:4px 2px 10px':'display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;padding:2px 0 8px'});
   const msgs=cur&&S.threads[cur]?S.threads[cur].slice(-40):[];
   if(!msgs.length&&!adding)thread.append(el('div',{style:'color:var(--muted);text-align:center;padding:14px 0'},cur?'Сообщений пока нет':'Здесь появятся сообщения'));
-  for(const m of msgs){const me=m.from==='me';thread.append(el('div',{class:'pop',style:'max-width:82%;padding:7px 11px;border-radius:16px;white-space:pre-wrap;word-break:break-word;align-self:'+(me?'flex-end':'flex-start')+';background:'+(me?'var(--accent)':'var(--line)')+';color:'+(me?'var(--on-accent)':'var(--fg)')},m.text))}
+  for(const m of msgs){const me=m.from==='me';thread.append(el('div',{class:'pop',style:'max-width:82%;padding:'+(FULL?'9px 13px;font-size:15px;':'7px 11px;')+'border-radius:18px;white-space:pre-wrap;word-break:break-word;align-self:'+(me?'flex-end':'flex-start')+';background:'+(me?'var(--accent)':'var(--line)')+';color:'+(me?'var(--on-accent)':'var(--fg)')},m.text))}
   app.append(thread);
   const input=el('input',{placeholder:'Сообщение…',style:'flex:1'});
   const send=()=>{
     const text=input.value.trim();const to=adding&&nameInput?nameInput.value.trim():cur;
     if(!text||!to||BUSY)return;
     input.value='';cur=to;adding=false;
-    post({type:'send',text:'📱 Сообщение для '+to+': '+text,ops:[{w:'phone',t:'msg',to,text}]});
+    post({type:'send',reply:false,text:'📱 Сообщение для '+to+': '+text,ops:[{w:'phone',t:'msg',to,text}]});
   };
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();send()}});
   const btn=el('button',{class:'btn',onclick:send,disabled:BUSY},'➤');

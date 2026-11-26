@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useOverlay } from '../lib/overlay';
 import { useChat } from '../store/chat';
 import { useWidgets } from '../widgets/useStates';
 import { Icon } from './Icon';
@@ -27,15 +29,15 @@ function readTheme() {
  * Виджет в изолированном iframe (sandbox без allow-same-origin): у него нет доступа к приложению,
  * ключам и базе. Общение только через postMessage.
  */
-function WidgetFrame({ id, state, busy, onSend }: { id: FrameId; state: unknown; busy: boolean; onSend: (text: string, ops: never[]) => void }) {
+function WidgetFrame({ id, state, busy, full, onSend }: { id: FrameId; state: unknown; busy: boolean; full?: boolean; onSend: (text: string, ops: never[], reply: boolean) => void }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
   const srcDoc = useMemo(() => widgetHtml(id), [id]);
-  const latest = useRef({ state, busy });
-  latest.current = { state, busy };
+  const latest = useRef({ state, busy, full });
+  latest.current = { state, busy, full };
   const themeVersion = useTheme((t) => `${t.mode}${t.accent}`);
 
-  const push = () => ref.current?.contentWindow?.postMessage({ eq: 1, state: latest.current.state, busy: latest.current.busy, theme: readTheme() }, '*');
+  const push = () => ref.current?.contentWindow?.postMessage({ eq: 1, state: latest.current.state, busy: latest.current.busy, full: !!latest.current.full, theme: readTheme() }, '*');
 
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
@@ -43,15 +45,15 @@ function WidgetFrame({ id, state, busy, onSend }: { id: FrameId; state: unknown;
       const d = e.data;
       if (!d || d.eq !== 1) return;
       if (d.type === 'ready') push();
-      else if (d.type === 'resize' && typeof d.h === 'number') setHeight(Math.min(Math.max(d.h, 40), 420));
-      else if (d.type === 'send' && typeof d.text === 'string') onSend(d.text, Array.isArray(d.ops) ? d.ops : []);
+      else if (d.type === 'resize' && typeof d.h === 'number' && !latest.current.full) setHeight(Math.min(Math.max(d.h, 40), 420));
+      else if (d.type === 'send' && typeof d.text === 'string') onSend(d.text, Array.isArray(d.ops) ? d.ops : [], d.reply !== false);
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(push, [state, busy, themeVersion]);
+  useEffect(push, [state, busy, full, themeVersion]);
 
   return (
     <iframe
@@ -59,9 +61,31 @@ function WidgetFrame({ id, state, busy, onSend }: { id: FrameId; state: unknown;
       title={id}
       sandbox="allow-scripts"
       srcDoc={srcDoc}
-      style={{ height, colorScheme: 'normal' }}
+      style={{ height: full ? '100%' : height, colorScheme: 'normal' }}
       className="w-full border-0 bg-transparent transition-[height] duration-200"
     />
+  );
+}
+
+/** Телефон на весь чат: красивый полноэкранный мессенджер. Закрывается кнопкой или жестом «назад». */
+function PhoneFull({ state, busy, onSend, onClose: onCloseProp }: { state: unknown; busy: boolean; onSend: (text: string, ops: never[], reply: boolean) => void; onClose: () => void }) {
+  const { closing, close } = useOverlay(onCloseProp);
+  return createPortal(
+    <div className={`${closing ? 'anim-page-out' : 'anim-page'} fixed inset-0 z-[45] flex flex-col bg-zinc-950`}>
+      <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="mb-2 flex items-center gap-2">
+          <button onClick={close} className="rounded-xl p-2 text-zinc-300" aria-label="Свернуть телефон">
+            <Icon name="left" />
+          </button>
+          <h2 className="font-display text-lg font-semibold">Телефон</h2>
+          <span className="ml-auto text-xs text-zinc-500">{busy ? 'модель отвечает…' : 'сообщения уйдут модели, когда ты напишешь в чат'}</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden rounded-3xl border border-fg/10 bg-zinc-900/60 p-3">
+          <WidgetFrame id="phone" state={state} busy={busy} full onSend={onSend} />
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -88,10 +112,12 @@ export function WidgetDock() {
   const { enabled: all, states } = useWidgets();
   const enabled = all.filter((id): id is FrameId => FRAME_WIDGETS.includes(id));
   const [tab, setTab] = useState<FrameId | null>(null);
+  const [full, setFull] = useState(false);
 
   if (!chat || !states || !enabled.length) return null;
   const active = tab && enabled.includes(tab) ? tab : enabled[0];
   const setOpen = (v: boolean) => void updateChat(chat.id, { widgetsOpen: v });
+  const onSend = (text: string, ops: never[], reply: boolean) => void send(text, undefined, ops, { reply });
 
   if (!chat.widgetsOpen) {
     const { text, hot } = peekText(enabled, states);
@@ -122,13 +148,19 @@ export function WidgetDock() {
               {WIDGETS.find((w) => w.id === id)?.name}
             </button>
           ))}
-        <button onClick={() => setOpen(false)} className="ml-auto rounded-lg p-1 text-zinc-500" aria-label="Свернуть виджеты">
+        {active === 'phone' && (
+          <button onClick={() => setFull(true)} className="ml-auto rounded-lg p-1 text-zinc-500" aria-label="Развернуть телефон на весь экран">
+            <Icon name="expand" size={18} />
+          </button>
+        )}
+        <button onClick={() => setOpen(false)} className={`${active === 'phone' ? '' : 'ml-auto'} rounded-lg p-1 text-zinc-500`} aria-label="Свернуть виджеты">
           <Icon name="down" size={18} />
         </button>
       </div>
       <div style={{ maxHeight: '42dvh' }} className="overflow-y-auto">
-        <WidgetFrame key={active} id={active} state={states[active]} busy={busy} onSend={(text, ops) => void send(text, undefined, ops)} />
+        {!(full && active === 'phone') && <WidgetFrame key={active} id={active} state={states[active]} busy={busy} onSend={onSend} />}
       </div>
+      {full && active === 'phone' && <PhoneFull state={states.phone} busy={busy} onSend={onSend} onClose={() => setFull(false)} />}
     </div>
   );
 }
