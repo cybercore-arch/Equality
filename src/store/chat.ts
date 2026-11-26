@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { db } from '../db/db';
 import { streamChat } from '../providers';
 import type { Attachment, Chat, Folder, Message, MessageStats } from '../types';
-import { buildContext, messageText } from './prompt';
+import { buildContext, fillNames, messageText } from './prompt';
+import { useRp } from './rp';
 import { resolveProvider } from './resolve';
 import { useSettings } from './settings';
 
@@ -97,6 +98,8 @@ interface ChatState {
   toggleFolder: (id: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
 
+  /** Начать игру с персонажем: приветствие становится первым сообщением (остальные приветствия — свайпами) */
+  startWithCharacter: (characterId: string) => Promise<void>;
   send: (text: string, attachments?: Attachment[]) => Promise<void>;
   regenerate: (instruction?: string) => Promise<void>;
   /** Повторить запрос, если на последнее сообщение пользователя не пришёл ответ */
@@ -291,6 +294,7 @@ export const useChat = create<ChatState>((set, get) => {
     error: null,
 
     async init() {
+      void useRp.getState().load();
       const [chats, folders] = await Promise.all([
         db.chats.orderBy('updatedAt').reverse().toArray(),
         db.folders.orderBy('createdAt').toArray(),
@@ -396,6 +400,35 @@ export const useChat = create<ChatState>((set, get) => {
         folders: s.folders.filter((f) => f.id !== id),
         chats: s.chats.map((c) => (c.folderId === id ? { ...c, folderId: null } : c)),
       }));
+    },
+
+    async startWithCharacter(characterId) {
+      const ch = useRp.getState().characters.find((c) => c.id === characterId);
+      if (!ch) return;
+      get().stop();
+      let cur = currentChat();
+      if (!cur || get().path.length > 0) {
+        const t = Date.now();
+        cur = { id: uid(), title: NEW_TITLE, leafId: null, createdAt: t, updatedAt: t, folderId: null };
+        await db.chats.put(cur);
+        set((s) => ({ chats: [cur!, ...s.chats], chatId: cur!.id, messages: {}, children: {}, path: [], error: null }));
+      }
+      const { personas } = useRp.getState();
+      const pid = cur.personaId ?? useSettings.getState().defaultPersonaId;
+      const userName = personas.find((p) => p.id === pid)?.name;
+      const greetings = [ch.firstMessage, ...ch.alternateGreetings].map((g) => g.trim()).filter(Boolean);
+      const msgs: Message[] = greetings.map((g) => ({
+        id: uid(),
+        chatId: cur!.id,
+        parentId: null,
+        role: 'assistant',
+        content: fillNames(g, ch.name, userName),
+        createdAt: now(),
+      }));
+      await db.messages.bulkPut(msgs);
+      for (const m of msgs) putMessage(m);
+      await saveLeaf(msgs[0]?.id ?? null, { characterId, modeId: 'rp', title: ch.name.slice(0, 40) });
+      if (msgs[0]) set((st) => ({ path: pathTo(st.messages, msgs[0].id) }));
     },
 
     async send(text, attachments) {

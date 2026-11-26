@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useOverlay } from '../lib/overlay';
 import { PROVIDER_LABEL } from '../guides';
+import { useRp } from '../store/rp';
 import { useSettings } from '../store/settings';
+import { CharactersScreen } from './CharactersScreen';
 import { GlobalPromptSheet } from './GlobalPromptSheet';
 import { Icon } from './Icon';
 import { SettingsPanel } from './SettingsPanel';
@@ -27,6 +29,8 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
   const { closing, close: onClose } = useOverlay(onCloseProp);
   const [providers, setProviders] = useState(false);
   const [prompt, setPrompt] = useState(false);
+  const [library, setLibrary] = useState(false);
+  const rpCount = useRp((s) => s.characters.length);
   const globalPrompt = useSettings((s) => s.globalPrompt);
   const active = useSettings((s) => s.providers.find((p) => p.id === s.activeProvider));
 
@@ -49,6 +53,7 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
           <section className="space-y-2">
             <div className="mb-2 text-xs uppercase tracking-widest text-zinc-500">Приложение</div>
             <Row title="Оформление" hint="Цвет, фон, прозрачность, размер текста" onClick={onAppearance} />
+            <Row title="Персонажи и персоны" hint={rpCount ? `Персонажей: ${rpCount}` : 'Карточки, персоны игрока, импорт'} onClick={() => setLibrary(true)} />
             <Row
               title="Общий системный промпт"
               hint={globalPrompt.trim() ? globalPrompt.trim().replace(/\s+/g, ' ').slice(0, 60) : 'Не задан. Добавляется во все чаты'}
@@ -61,11 +66,12 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
             />
           </section>
 
-          <p className="pt-4 text-center text-xs text-zinc-600">Equality · версия 0.4</p>
+          <p className="pt-4 text-center text-xs text-zinc-600">Equality · версия 0.5</p>
         </div>
       </div>
       {providers && <SettingsPanel onClose={() => setProviders(false)} />}
       {prompt && <GlobalPromptSheet onClose={() => setPrompt(false)} />}
+      {library && <CharactersScreen onClose={() => setLibrary(false)} />}
     </div>
   );
 }

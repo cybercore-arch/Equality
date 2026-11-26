@@ -4,6 +4,7 @@ import { estimateTokens, formatContext } from '../lib/tokens';
 import { getMode } from '../modes';
 import { useChat } from '../store/chat';
 import { buildContext } from '../store/prompt';
+import { useRp } from '../store/rp';
 import { useSettings } from '../store/settings';
 import { Collapsible } from './Collapsible';
 import { Icon } from './Icon';
@@ -84,6 +85,9 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
   const setChatMode = useChat((s) => s.setChatMode);
   const summarizeContext = useChat((s) => s.summarizeContext);
   const setSummary = useChat((s) => s.setSummary);
+  const characters = useRp((s) => s.characters);
+  const personas = useRp((s) => s.personas);
+  const defaultPersonaId = useSettings((s) => s.defaultPersonaId);
   const globalPrompt = useSettings((s) => s.globalPrompt);
   const searchEnabled = useSettings((s) => s.searchEnabled);
 
@@ -126,6 +130,47 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
           <Collapsible title="Режим" hint={mode.name}>
             <ModePicker value={chat.modeId ?? 'general'} onChange={(id) => void setChatMode(chat.id, id)} />
           </Collapsible>
+
+          {(chat.modeId === 'rp' || chat.characterId) && (
+            <Collapsible
+              title="Персонаж и персона"
+              hint={`${characters.find((c) => c.id === chat.characterId)?.name ?? 'без персонажа'} · ${
+                personas.find((p) => p.id === (chat.personaId ?? defaultPersonaId))?.name ?? 'без персоны'
+              }`}
+            >
+              <label className="block text-sm">
+                <span className="text-zinc-300">Персонаж</span>
+                <select
+                  value={chat.characterId ?? ''}
+                  onChange={(e) => void updateChat(chat.id, { characterId: e.target.value || undefined })}
+                  className="mt-1.5 w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none"
+                >
+                  <option value="">Без персонажа</option>
+                  {characters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="text-zinc-300">Персона игрока</span>
+                <select
+                  value={chat.personaId ?? ''}
+                  onChange={(e) => void updateChat(chat.id, { personaId: e.target.value || undefined })}
+                  className="mt-1.5 w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none"
+                >
+                  <option value="">По умолчанию{defaultPersonaId ? '' : ' (не выбрана)'}</option>
+                  {personas.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-xs text-zinc-500">Смена персонажа в середине чата меняет только то, как модель играет дальше. Приветствие не добавляется.</p>
+            </Collapsible>
+          )}
 
           <Collapsible title="Параметры" hint={`Температура ${Number(ctx.temperature.toFixed(2))} · Top-P ${Number(ctx.topP.toFixed(2))}`} defaultOpen>
             <Param

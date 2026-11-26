@@ -1,5 +1,7 @@
 import { getMode } from '../modes';
-import type { Chat, ChatMessageInput, Message } from '../types';
+import { useSettings } from './settings';
+import { useRp } from './rp';
+import type { Character, Chat, ChatMessageInput, Message } from '../types';
 
 /** Текст сообщения для модели: сам текст и содержимое прикреплённых текстовых файлов. */
 export function messageText(m: Message): string {
@@ -9,13 +11,39 @@ export function messageText(m: Message): string {
   return [m.content, ...files].filter(Boolean).join('\n\n');
 }
 
+/** Персонаж и персона этого чата (персона чата, иначе по умолчанию из настроек). */
+export function resolveRp(chat: Chat) {
+  const { characters, personas } = useRp.getState();
+  const character = chat.characterId ? characters.find((c) => c.id === chat.characterId) : undefined;
+  const pid = chat.personaId ?? useSettings.getState().defaultPersonaId;
+  const persona = pid ? personas.find((p) => p.id === pid) : undefined;
+  return { character, persona };
+}
+
+/** Подставляет имена вместо {{char}} и {{user}} (так принято в карточках SillyTavern). */
+export function fillNames(text: string, charName = 'Персонаж', userName = 'Игрок'): string {
+  return text.replace(/\{\{\s*char\s*\}\}/gi, charName).replace(/\{\{\s*user\s*\}\}/gi, userName);
+}
+
+function characterPrompt(c: Character): string {
+  const parts = [
+    `[Персонаж, за которого ты играешь: ${c.name}]`,
+    c.systemPrompt.trim(),
+    c.description.trim(),
+    c.personality.trim() && `Характер: ${c.personality.trim()}`,
+    c.scenario.trim() && `Сценарий: ${c.scenario.trim()}`,
+    c.exampleDialogue.trim() && `Пример манеры речи и диалога:\n${c.exampleDialogue.trim()}`,
+  ];
+  return parts.filter(Boolean).join('\n');
+}
+
 /** Грубая обрезка контекста по символам: страховка, если выжимку никто не делал. */
 const MAX_CONTEXT_CHARS = 48_000;
 
 export interface BuiltContext {
-  /** Итоговый системный промпт: слои склеены в порядке «общий → режим → чат → выжимка → пожелание» */
+  /** Итоговый системный промпт: слои склеены в порядке «общий → режим → персонаж → персона → чат → выжимка → пожелание» */
   system: string;
-  layers: { global: string; mode: string; chat: string; summary: string; instruction: string };
+  layers: { global: string; mode: string; character: string; persona: string; chat: string; summary: string; instruction: string };
   /** Сообщения, которые уйдут модели (без тех, что уже заменены выжимкой) */
   input: ChatMessageInput[];
   temperature: number;
@@ -75,9 +103,14 @@ export function buildContext(args: {
   let total = input.reduce((n, m) => n + m.content.length, 0);
   while (input.length > 2 && total > MAX_CONTEXT_CHARS) total -= input.shift()!.content.length;
 
+  const { character, persona } = resolveRp(chat);
+  const sub = (t: string) => fillNames(t, character?.name, persona?.name);
+
   const layers = {
     global: chat.noGlobalPrompt ? '' : args.globalPrompt.trim(),
     mode: chat.noModePrompt ? '' : mode.systemPrompt,
+    character: character ? sub(characterPrompt(character)) : '',
+    persona: persona ? sub(`[Пользователь играет за: ${persona.name}]\n${persona.description}`.trim()) : '',
     chat: (chat.systemPrompt ?? '').trim(),
     summary: summary
       ? `Краткое содержание более ранней части этой переписки (самих сообщений ты уже не видишь):\n${summary}`

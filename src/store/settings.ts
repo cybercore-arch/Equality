@@ -32,6 +32,9 @@ interface SettingsState {
   /** Общий системный промпт: добавляется во все чаты всех режимов */
   globalPrompt: string;
   setGlobalPrompt: (v: string) => void;
+  /** Персона игрока по умолчанию для ролплея */
+  defaultPersonaId: string | null;
+  setDefaultPersona: (id: string | null) => void;
   updateProvider: (id: ProviderKind, patch: Partial<ProviderConfig>) => void;
   setActiveProvider: (id: ProviderKind) => void;
   setMode: (id: string) => void;
@@ -49,6 +52,8 @@ export const useSettings = create<SettingsState>()(
       setSearchEnabled: (v) => set({ searchEnabled: v }),
       globalPrompt: '',
       setGlobalPrompt: (v) => set({ globalPrompt: v }),
+      defaultPersonaId: null,
+      setDefaultPersona: (id) => set({ defaultPersonaId: id }),
       updateProvider: (id, patch) =>
         set((s) => ({ providers: s.providers.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       setActiveProvider: (id) => set({ activeProvider: id }),

@@ -76,6 +76,9 @@ export interface Chat {
   /** Выжимка старой части переписки и id последнего сообщения, которое она заменяет */
   summary?: string;
   summaryUpToId?: string;
+  /** Ролплей: персонаж и персона этого чата (персона пусто = по умолчанию) */
+  characterId?: string;
+  personaId?: string;
 }
 
 export interface ModelInfo {
@@ -132,4 +135,35 @@ export interface StreamParams {
   signal: AbortSignal;
   /** Провайдер сообщает точное число токенов, когда оно известно */
   onUsage?: (u: { completion?: number; prompt?: number }) => void;
+}
+
+/** Карточка персонажа (совместима с форматом Character Card V2 из SillyTavern/Chub). */
+export interface Character {
+  id: string;
+  name: string;
+  description: string;
+  personality: string;
+  scenario: string;
+  firstMessage: string;
+  alternateGreetings: string[];
+  exampleDialogue: string;
+  /** Системный промпт самой карточки (если автор его задал) */
+  systemPrompt: string;
+  creatorNotes: string;
+  tags: string[];
+  /** Аватар: уменьшенный JPEG в виде data URL */
+  avatar?: string;
+  /** Встроенный лорбук карточки в исходном виде (будет использоваться в этапе 4B, при экспорте сохраняется) */
+  book?: unknown;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Персона игрока: кем ты являешься в истории. */
+export interface Persona {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: number;
+  updatedAt: number;
 }

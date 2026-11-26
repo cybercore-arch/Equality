@@ -1,6 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChat } from '../store/chat';
+import { useRp } from '../store/rp';
+import { Avatar } from './Avatar';
+import { CharactersScreen } from './CharactersScreen';
 import { MessageItem } from './MessageItem';
 import { ModePicker } from './ModePicker';
 
@@ -16,6 +19,9 @@ function greeting() {
 function EmptyState() {
   const chat = useChat((s) => s.chats.find((c) => c.id === s.chatId));
   const setChatMode = useChat((s) => s.setChatMode);
+  const start = useChat((s) => s.startWithCharacter);
+  const characters = useRp((s) => s.characters);
+  const [library, setLibrary] = useState(false);
   return (
     <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center px-6 py-8">
       <h2 className="anim-rise font-display text-3xl font-semibold tracking-tight">{greeting()}</h2>
@@ -28,6 +34,27 @@ function EmptyState() {
           <ModePicker value={chat.modeId ?? 'general'} onChange={(id) => void setChatMode(chat.id, id)} />
         </div>
       )}
+      {chat?.modeId === 'rp' && (
+        <div className="anim-rise mt-6">
+          <div className="mb-2 text-xs uppercase tracking-widest text-zinc-500">Персонаж</div>
+          <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-2">
+            {characters.map((c) => (
+              <button key={c.id} onClick={() => void start(c.id)} className="flex w-20 shrink-0 flex-col items-center gap-1.5 text-center">
+                <Avatar src={c.avatar} name={c.name} size={64} />
+                <span className="w-full truncate text-xs text-zinc-300">{c.name}</span>
+              </button>
+            ))}
+            <button onClick={() => setLibrary(true)} className="flex w-20 shrink-0 flex-col items-center gap-1.5 text-center">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-zinc-600 text-zinc-400">+</span>
+              <span className="text-xs text-zinc-400">{characters.length ? 'Все' : 'Создать'}</span>
+            </button>
+          </div>
+          {characters.length === 0 && (
+            <p className="text-xs text-zinc-500">Создай персонажа или импортируй готовую карточку. Можно и без персонажа: просто пиши, о чём играть.</p>
+          )}
+        </div>
+      )}
+      {library && <CharactersScreen onClose={() => setLibrary(false)} onPick={(id) => void start(id)} />}
     </div>
   );
 }
