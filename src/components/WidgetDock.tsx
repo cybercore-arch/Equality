@@ -6,6 +6,8 @@ import { useTheme } from '../store/theme';
 import { widgetHtml } from '../widgets/html';
 import { FRAME_WIDGETS, WIDGETS, type WidgetId } from '../widgets/registry';
 
+type FrameId = Exclude<WidgetId, 'status'>;
+
 const rgb = (name: string) => `rgb(${getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace(/\s+/g, ' ')})`;
 
 /** Цвета приложения для виджета, чтобы он выглядел как часть интерфейса. */
@@ -25,7 +27,7 @@ function readTheme() {
  * Виджет в изолированном iframe (sandbox без allow-same-origin): у него нет доступа к приложению,
  * ключам и базе. Общение только через postMessage.
  */
-function WidgetFrame({ id, state, busy, onSend }: { id: Exclude<WidgetId, 'status'>; state: unknown; busy: boolean; onSend: (text: string, ops: never[]) => void }) {
+function WidgetFrame({ id, state, busy, onSend }: { id: FrameId; state: unknown; busy: boolean; onSend: (text: string, ops: never[]) => void }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
   const srcDoc = useMemo(() => widgetHtml(id), [id]);
@@ -64,7 +66,7 @@ function WidgetFrame({ id, state, busy, onSend }: { id: Exclude<WidgetId, 'statu
 }
 
 /** Короткая строка-подсказка для свёрнутой панели: что сейчас происходит в виджетах. */
-function peekText(enabled: WidgetId[], st: NonNullable<ReturnType<typeof useWidgets>['states']>): { text: string; hot: boolean } {
+function peekText(enabled: FrameId[], st: NonNullable<ReturnType<typeof useWidgets>['states']>): { text: string; hot: boolean } {
   if (enabled.includes('roll') && st.roll.pending) return { text: `Нужен бросок ${st.roll.pending.d}${st.roll.pending.reason ? `: ${st.roll.pending.reason}` : ''}`, hot: true };
   if (enabled.includes('phone')) {
     const last = st.phone.order[st.phone.order.length - 1];
@@ -84,8 +86,8 @@ export function WidgetDock() {
   const send = useChat((s) => s.send);
   const updateChat = useChat((s) => s.updateChat);
   const { enabled: all, states } = useWidgets();
-  const enabled = all.filter((id) => FRAME_WIDGETS.includes(id));
-  const [tab, setTab] = useState<WidgetId | null>(null);
+  const enabled = all.filter((id): id is FrameId => FRAME_WIDGETS.includes(id));
+  const [tab, setTab] = useState<FrameId | null>(null);
 
   if (!chat || !states || !enabled.length) return null;
   const active = tab && enabled.includes(tab) ? tab : enabled[0];
