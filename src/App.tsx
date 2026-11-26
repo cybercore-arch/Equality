@@ -17,6 +17,8 @@ import { applyTheme, useTheme } from './store/theme';
 export default function App() {
   const init = useChat((s) => s.init);
   const onboarded = useSettings((s) => s.onboarded);
+  const keysReady = useSettings((s) => s.keysReady);
+  const initKeys = useSettings((s) => s.initKeys);
 
   const [sidebar, setSidebar] = useState(false);
   const [appSettings, setAppSettings] = useState(false);
@@ -38,9 +40,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    void initKeys();
+  }, [initKeys]);
+
+  useEffect(() => {
     void init();
   }, [init]);
 
+  if (!keysReady) return <div className="h-[100dvh] bg-zinc-950" />;
   if (!onboarded) return <Welcome />;
 
   return (

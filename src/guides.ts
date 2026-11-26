@@ -1,3 +1,4 @@
+import { CATALOG } from './providers/catalog';
 import type { ProviderKind } from './types';
 
 export interface Guide {
@@ -7,7 +8,7 @@ export interface Guide {
 }
 
 /** Подсказки «где взять ключ» — показываются на первом экране и в настройках. */
-export const GUIDES: Record<ProviderKind, Guide> = {
+const DETAILED: Partial<Record<ProviderKind, Guide>> = {
   gemini: {
     title: 'Ключ Gemini (бесплатно, около минуты)',
     steps: [
@@ -47,16 +48,22 @@ export const GUIDES: Record<ProviderKind, Guide> = {
   },
 };
 
-export const PROVIDER_LABEL: Record<ProviderKind, string> = {
-  gemini: 'Gemini',
-  openrouter: 'OpenRouter',
-  groq: 'Groq',
-  custom: 'Свой',
-};
 
-export const PROVIDER_HINT: Record<ProviderKind, string> = {
-  gemini: 'бесплатно, из некоторых стран нужен VPN',
-  openrouter: 'рекомендуем: много бесплатных моделей',
-  groq: 'очень быстро',
-  custom: 'любой OpenAI-совместимый',
-};
+export const GUIDES = Object.fromEntries(
+  CATALOG.map((m) => [
+    m.id,
+    DETAILED[m.id] ?? {
+      title: `Ключ ${m.label}`,
+      steps: [
+        `Открой ${m.keyUrl?.replace('https://', '')} и войди или зарегистрируйся.`,
+        'Найди раздел с API-ключами и создай новый ключ.',
+        'Скопируй ключ и вставь его сюда.',
+        'Условия и цены сервиса смотри на его сайте: у многих есть платные тарифы.',
+      ],
+      link: m.keyUrl,
+    },
+  ]),
+) as Record<ProviderKind, Guide>;
+
+export const PROVIDER_LABEL = Object.fromEntries(CATALOG.map((m) => [m.id, m.label])) as Record<ProviderKind, string>;
+export const PROVIDER_HINT = Object.fromEntries(CATALOG.map((m) => [m.id, m.hint])) as Record<ProviderKind, string>;

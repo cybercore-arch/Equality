@@ -1,23 +1,26 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { CATALOG } from '../providers/catalog';
 import type { ProviderConfig, ProviderKind } from '../types';
+import { secureGet, secureSet, secureWorks } from './secure';
 
 /**
  * ВАЖНО: на Этапе 1 ключи лежат в localStorage (открытым текстом).
  * На Этапе 4 заменим на Android Keystore / системное хранилище ПК.
  * Названия моделей меняются у провайдеров — их можно править прямо в настройках.
  */
-const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  { id: 'gemini', name: 'Google Gemini', apiKey: '', model: 'gemini-3.8-flash' },
-  {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    apiKey: '',
-    model: 'meta-llama/llama-3.3-70b-instruct:free',
-  },
-  { id: 'groq', name: 'Groq', apiKey: '', model: 'llama-3.3-70b-versatile' },
-  { id: 'custom', name: 'Свой (OpenAI-совместимый)', apiKey: '', model: '', baseUrl: '' },
-];
+const DEFAULT_PROVIDERS: ProviderConfig[] = CATALOG.map((m) => ({
+  id: m.id,
+  name: m.id === 'custom' ? 'Свой (OpenAI-совместимый)' : m.label,
+  apiKey: '',
+  model: m.defaultModel,
+  ...(m.id === 'custom' ? { baseUrl: '' } : {}),
+}));
+
+/** Ключи, уже перенесённые в защищённое хранилище: сравниваем с ними, чтобы писать только изменения */
+let savedKeys: Record<string, string> = {};
+/** true, когда защищённое хранилище проверено и работает: тогда ключи не пишем в localStorage */
+let secureOk = false;
 
 interface SettingsState {
   providers: ProviderConfig[];
@@ -41,11 +44,41 @@ interface SettingsState {
   updateProvider: (id: ProviderKind, patch: Partial<ProviderConfig>) => void;
   setActiveProvider: (id: ProviderKind) => void;
   setMode: (id: string) => void;
+  /** Ключи загружены из защищённого хранилища (до этого интерфейс не показываем) */
+  keysReady: boolean;
+  initKeys: () => Promise<void>;
 }
 
 export const useSettings = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
+      keysReady: false,
+      async initKeys() {
+        if (!(await secureWorks())) {
+          set({ keysReady: true });
+          return;
+        }
+        // Достаём ключи из хранилища; ключи, которые ещё лежат открытым текстом (старые версии), переносим туда
+        const next = await Promise.all(
+          get().providers.map(async (p) => {
+            const stored = await secureGet(`apikey:${p.id}`);
+            if (stored) return { ...p, apiKey: stored };
+            if (p.apiKey) await secureSet(`apikey:${p.id}`, p.apiKey);
+            return p;
+          }),
+        );
+        savedKeys = Object.fromEntries(next.map((p) => [p.id, p.apiKey]));
+        secureOk = true;
+        set({ providers: next, keysReady: true }); // заодно перезаписывает localStorage уже без ключей
+        useSettings.subscribe((st) => {
+          for (const p of st.providers) {
+            if (savedKeys[p.id] !== p.apiKey) {
+              savedKeys[p.id] = p.apiKey;
+              void secureSet(`apikey:${p.id}`, p.apiKey);
+            }
+          }
+        });
+      },
       providers: DEFAULT_PROVIDERS,
       activeProvider: 'openrouter',
       modeId: 'general',
@@ -67,6 +100,19 @@ export const useSettings = create<SettingsState>()(
     {
       name: 'settings-v1',
       version: 2,
+      // В localStorage ключи не пишем, если работает защищённое хранилище; служебные поля тоже не сохраняем
+      partialize: (st) => {
+        const { keysReady: _k, initKeys: _i, ...rest } = st;
+        void _k;
+        void _i;
+        return secureOk ? { ...rest, providers: st.providers.map((p) => ({ ...p, apiKey: '' })) } : rest;
+      },
+      // Новые провайдеры из каталога добавляются к уже сохранённым настройкам
+      merge: (persisted, current) => {
+        const saved = (persisted as Partial<SettingsState> | undefined) ?? {};
+        const providers = DEFAULT_PROVIDERS.map((d) => ({ ...d, ...saved.providers?.find((p) => p.id === d.id) }));
+        return { ...current, ...saved, providers };
+      },
       // Версия 2: Google отключил gemini-2.5-flash, заменяем старое значение у тех, кто его не менял
       migrate: (persisted, version) => {
         const state = persisted as { providers?: ProviderConfig[] };

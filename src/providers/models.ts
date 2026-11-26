@@ -1,11 +1,7 @@
 import type { ModelInfo, ProviderConfig } from '../types';
 import { throwHttpError } from './sse';
 
-const DEFAULT_BASE: Record<string, string> = {
-  gemini: 'https://generativelanguage.googleapis.com/v1beta',
-  openrouter: 'https://openrouter.ai/api/v1',
-  groq: 'https://api.groq.com/openai/v1',
-};
+import { metaOf } from './catalog';
 
 // Модели не для текстового чата: распознавание речи, озвучка, картинки, эмбеддинги, фильтры безопасности
 const NOT_CHAT = /whisper|tts|speech|transcri|embed|moderation|guard|imagen|veo|\baqa\b|dall-e|image|audio|realtime|live/i;
@@ -15,7 +11,7 @@ const NOT_CHAT = /whisper|tts|speech|transcri|embed|moderation|guard|imagen|veo|
  * Если провайдер сообщает размер контекста модели, он тоже возвращается.
  */
 export async function listModels(cfg: ProviderConfig): Promise<ModelInfo[]> {
-  const base = (cfg.baseUrl || DEFAULT_BASE[cfg.id] || '').replace(/\/+$/, '');
+  const base = (cfg.baseUrl || metaOf(cfg.id).base).replace(/\/+$/, '');
   if (!base) throw new Error('Сначала укажи Base URL');
   if (cfg.id !== 'custom' && !cfg.apiKey.trim()) throw new Error('Сначала вставь API-ключ');
 

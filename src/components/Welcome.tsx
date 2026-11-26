@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { GUIDES, PROVIDER_HINT, PROVIDER_LABEL } from '../guides';
+import { CATALOG, metaOf } from '../providers/catalog';
 import { useSettings } from '../store/settings';
 import type { ProviderKind } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 
-const ORDER: ProviderKind[] = ['openrouter', 'gemini', 'groq', 'custom'];
+const FEATURED: ProviderKind[] = CATALOG.filter((m) => m.featured).map((m) => m.id);
+const OTHERS: ProviderKind[] = CATALOG.filter((m) => !m.featured).map((m) => m.id);
 
 /** Печатает текст по буквам. Невидимая копия держит высоту, чтобы вёрстка не прыгала. */
 function Typewriter({ text, speed = 80 }: { text: string; speed?: number }) {
@@ -35,6 +37,7 @@ export function Welcome() {
 
   const [showKey, setShowKey] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showOthers, setShowOthers] = useState(!metaOf(activeProvider).featured);
 
   const cfg = providers.find((p) => p.id === activeProvider)!;
   const guide = GUIDES[cfg.id];
@@ -55,8 +58,15 @@ export function Welcome() {
 
         <div className="anim-rise mt-8" style={{ animationDelay: '900ms' }}>
           <div className="mb-2 text-xs uppercase tracking-widest text-zinc-500">Провайдер</div>
-          <div className="grid grid-cols-2 gap-2">
-            {ORDER.map((id) => (
+          {(
+            [
+              [FEATURED, 'rise'],
+              [showOthers ? OTHERS : [], 'fade'],
+            ] as const
+          ).map(([ids, kind], gi) =>
+            ids.length === 0 ? null : (
+              <div key={gi} className={`grid grid-cols-2 gap-2 ${gi ? 'anim-fade mt-2' : ''}`} data-k={kind}>
+                {ids.map((id) => (
               <button
                 key={id}
                 onClick={() => {
@@ -71,7 +81,12 @@ export function Welcome() {
                 <div className="text-xs text-zinc-500">{PROVIDER_HINT[id]}</div>
               </button>
             ))}
-          </div>
+              </div>
+            ),
+          )}
+          <button onClick={() => setShowOthers((v) => !v)} className="mt-2 text-sm text-zinc-400 transition-colors hover:text-zinc-200">
+            {showOthers ? 'Скрыть другие' : 'Другие провайдеры: DeepSeek, Mistral, OpenAI и др.'}
+          </button>
         </div>
 
         <div className="anim-rise mt-6 space-y-2" style={{ animationDelay: '1050ms' }}>

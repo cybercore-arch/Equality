@@ -105,7 +105,18 @@ export interface Folder {
   createdAt: number;
 }
 
-export type ProviderKind = 'gemini' | 'openrouter' | 'groq' | 'custom';
+export type ProviderKind =
+  | 'gemini'
+  | 'openrouter'
+  | 'groq'
+  | 'deepseek'
+  | 'mistral'
+  | 'openai'
+  | 'xai'
+  | 'cerebras'
+  | 'together'
+  | 'nvidia'
+  | 'custom';
 
 export interface ProviderConfig {
   id: ProviderKind;

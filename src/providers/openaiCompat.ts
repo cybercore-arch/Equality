@@ -1,17 +1,14 @@
 import type { ProviderConfig, StreamParams } from '../types';
 import { readSSE, throwHttpError } from './sse';
 
-const DEFAULT_BASE: Record<string, string> = {
-  openrouter: 'https://openrouter.ai/api/v1',
-  groq: 'https://api.groq.com/openai/v1',
-};
+import { metaOf } from './catalog';
 
 /** OpenRouter, Groq и любой OpenAI-совместимый эндпоинт. */
 export async function* streamOpenAICompat(
   cfg: ProviderConfig,
   p: StreamParams,
 ): AsyncGenerator<string> {
-  const base = (cfg.baseUrl || DEFAULT_BASE[cfg.id] || '').replace(/\/+$/, '');
+  const base = (cfg.baseUrl || metaOf(cfg.id).base).replace(/\/+$/, '');
   if (!base) throw new Error('Не указан Base URL');
 
   const headers: Record<string, string> = {
@@ -47,7 +44,7 @@ export async function* streamOpenAICompat(
       top_p: p.topP,
       ...(p.maxTokens ? { max_tokens: p.maxTokens } : {}),
       // Просим провайдера прислать точное число токенов в конце потока (свои серверы не трогаем)
-      ...(cfg.id !== 'custom' ? { stream_options: { include_usage: true } } : {}),
+      ...(metaOf(cfg.id).streamUsage ? { stream_options: { include_usage: true } } : {}),
     }),
   });
   if (!res.ok) await throwHttpError(res);
