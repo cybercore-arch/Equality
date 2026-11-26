@@ -9,6 +9,7 @@ import { ModelPicker } from './ModelPicker';
 /** Подключение к ИИ: показываем только те провайдеры, которые настроены; остальные добавляются кнопкой. */
 export function SettingsPanel({ onClose: onCloseProp }: { onClose: () => void }) {
   const { closing, close: onClose } = useOverlay(onCloseProp);
+  const secure = useSettings((s) => s.secure);
   const { providers, activeProvider, updateProvider, setActiveProvider, searchEnabled, setSearchEnabled } = useSettings();
   const [added, setAdded] = useState<ProviderKind[]>([]);
   const [adding, setAdding] = useState(false);
@@ -122,7 +123,7 @@ export function SettingsPanel({ onClose: onCloseProp }: { onClose: () => void })
         </label>
 
         <p className="mt-3 text-xs text-zinc-500">
-          Ключи хранятся только на этом устройстве и отправляются только своему провайдеру. На Android они лежат в защищённом хранилище (Keystore). Названия
+          Ключи хранятся только на этом устройстве и отправляются только своему провайдеру. {secure?.ok ? 'На Android они лежат в защищённом хранилище (Keystore). ' : secure ? `Защищённое хранилище Android не запустилось (${secure.error ?? 'ошибка'}), поэтому ключи пока хранятся в обычной памяти приложения. ` : ''}Названия
           моделей у провайдеров периодически меняются: при ошибке «model not found» выбери модель из списка.
         </p>
       </div>

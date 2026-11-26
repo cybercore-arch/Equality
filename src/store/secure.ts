@@ -27,12 +27,13 @@ export async function secureSet(key: string, value: string): Promise<void> {
 }
 
 /** Проверяет, что хранилище реально работает: записываем и читаем пробное значение. */
-export async function secureWorks(): Promise<boolean> {
-  if (!isNative) return false;
+export async function secureWorks(): Promise<{ ok: boolean; error?: string }> {
+  if (!isNative) return { ok: false };
   try {
     await secureSet('probe', 'ok');
-    return (await secureGet('probe')) === 'ok';
-  } catch {
-    return false;
+    const ok = (await secureGet('probe')) === 'ok';
+    return ok ? { ok } : { ok, error: 'пробное значение не прочиталось' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }

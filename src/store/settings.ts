@@ -46,6 +46,8 @@ interface SettingsState {
   setMode: (id: string) => void;
   /** Ключи загружены из защищённого хранилища (до этого интерфейс не показываем) */
   keysReady: boolean;
+  /** Состояние защищённого хранилища: null — не используется (браузер), ok:false — не удалось запустить */
+  secure: { ok: boolean; error?: string } | null;
   initKeys: () => Promise<void>;
 }
 
@@ -53,31 +55,43 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set, get) => ({
       keysReady: false,
+      secure: null,
       async initKeys() {
-        if (!(await secureWorks())) {
-          set({ keysReady: true });
-          return;
-        }
-        // Достаём ключи из хранилища; ключи, которые ещё лежат открытым текстом (старые версии), переносим туда
-        const next = await Promise.all(
-          get().providers.map(async (p) => {
-            const stored = await secureGet(`apikey:${p.id}`);
-            if (stored) return { ...p, apiKey: stored };
-            if (p.apiKey) await secureSet(`apikey:${p.id}`, p.apiKey);
-            return p;
-          }),
-        );
-        savedKeys = Object.fromEntries(next.map((p) => [p.id, p.apiKey]));
-        secureOk = true;
-        set({ providers: next, keysReady: true }); // заодно перезаписывает localStorage уже без ключей
-        useSettings.subscribe((st) => {
-          for (const p of st.providers) {
-            if (savedKeys[p.id] !== p.apiKey) {
-              savedKeys[p.id] = p.apiKey;
-              void secureSet(`apikey:${p.id}`, p.apiKey);
-            }
+        const run = async () => {
+          const probe = await secureWorks();
+          if (!probe.ok) {
+            set({ keysReady: true, secure: probe.error ? { ok: false, error: probe.error } : null });
+            return;
           }
-        });
+          // Достаём ключи из хранилища; ключи, которые ещё лежат открытым текстом (старые версии), переносим туда
+          const next = await Promise.all(
+            get().providers.map(async (p) => {
+              const stored = await secureGet(`apikey:${p.id}`);
+              if (stored) return { ...p, apiKey: stored };
+              if (p.apiKey) await secureSet(`apikey:${p.id}`, p.apiKey);
+              return p;
+            }),
+          );
+          savedKeys = Object.fromEntries(next.map((p) => [p.id, p.apiKey]));
+          secureOk = true;
+          set({ providers: next, keysReady: true, secure: { ok: true } }); // заодно перезаписывает localStorage уже без ключей
+          useSettings.subscribe((st) => {
+            for (const p of st.providers) {
+              if (savedKeys[p.id] !== p.apiKey) {
+                savedKeys[p.id] = p.apiKey;
+                void secureSet(`apikey:${p.id}`, p.apiKey).catch(() => undefined);
+              }
+            }
+          });
+        };
+        // Если хранилище сломалось или молчит, приложение всё равно запускается, а ключи остаются как раньше
+        const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('хранилище не отвечает')), 5000));
+        try {
+          await Promise.race([run(), timeout]);
+        } catch (e) {
+          secureOk = false;
+          set({ keysReady: true, secure: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+        }
       },
       providers: DEFAULT_PROVIDERS,
       activeProvider: 'openrouter',
@@ -102,9 +116,10 @@ export const useSettings = create<SettingsState>()(
       version: 2,
       // В localStorage ключи не пишем, если работает защищённое хранилище; служебные поля тоже не сохраняем
       partialize: (st) => {
-        const { keysReady: _k, initKeys: _i, ...rest } = st;
+        const { keysReady: _k, initKeys: _i, secure: _s, ...rest } = st;
         void _k;
         void _i;
+        void _s;
         return secureOk ? { ...rest, providers: st.providers.map((p) => ({ ...p, apiKey: '' })) } : rest;
       },
       // Новые провайдеры из каталога добавляются к уже сохранённым настройкам
