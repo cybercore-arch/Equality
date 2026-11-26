@@ -181,4 +181,4 @@ async function avatarPng(c: Character): Promise<Uint8Array> {
 }
 
 export const exportJson = (c: Character) => new Blob([JSON.stringify(cardToJson(c), null, 2)], { type: 'application/json' });
-export const exportPng = async (c: Character) => new Blob([embedPngCard(await avatarPng(c), cardToJson(c))], { type: 'image/png' });
+export const exportPng = async (c: Character) => new Blob([embedPngCard(await avatarPng(c), cardToJson(c)) as BlobPart], { type: 'image/png' });
