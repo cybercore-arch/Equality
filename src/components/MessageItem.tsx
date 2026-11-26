@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { dataUrl } from '../lib/attachments';
 import { ROOT, useChat } from '../store/chat';
 import type { MessageStats } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -199,7 +200,23 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
               <StatusLine />
             )
           ) : isUser ? (
-            <div className="whitespace-pre-wrap break-words">{text}</div>
+            <>
+              {m.attachments && m.attachments.length > 0 && (
+                <div className={`flex flex-wrap gap-2 ${text ? 'mb-2' : ''}`}>
+                  {m.attachments.map((a) =>
+                    a.kind === 'image' ? (
+                      <img key={a.id} src={dataUrl(a)} alt={a.name} className="max-h-48 max-w-full rounded-xl object-cover" />
+                    ) : (
+                      <span key={a.id} className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-black/20 px-2 py-1 text-xs">
+                        <Icon name="file" size={14} className="shrink-0" />
+                        <span className="truncate">{a.name}</span>
+                      </span>
+                    ),
+                  )}
+                </div>
+              )}
+              {text && <div className="whitespace-pre-wrap break-words">{text}</div>}
+            </>
           ) : (
             <Markdown text={text} />
           )}

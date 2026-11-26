@@ -22,7 +22,17 @@ export async function* streamOpenAICompat(
 
   const messages = [
     ...(p.system ? [{ role: 'system', content: p.system }] : []),
-    ...p.messages,
+    ...p.messages.map((m) =>
+      m.images?.length
+        ? {
+            role: m.role,
+            content: [
+              ...(m.content ? [{ type: 'text', text: m.content }] : []),
+              ...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.data}` } })),
+            ],
+          }
+        : { role: m.role, content: m.content },
+    ),
   ];
 
   const res = await fetch(`${base}/chat/completions`, {

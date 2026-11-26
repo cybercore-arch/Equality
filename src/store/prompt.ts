@@ -1,6 +1,14 @@
 import { getMode } from '../modes';
 import type { Chat, ChatMessageInput, Message } from '../types';
 
+/** Текст сообщения для модели: сам текст и содержимое прикреплённых текстовых файлов. */
+export function messageText(m: Message): string {
+  const files = (m.attachments ?? [])
+    .filter((a) => a.kind === 'text')
+    .map((a) => `[Файл: ${a.name}]\n\`\`\`\n${a.text ?? ''}\n\`\`\``);
+  return [m.content, ...files].filter(Boolean).join('\n\n');
+}
+
 /** Грубая обрезка контекста по символам: страховка, если выжимку никто не делал. */
 const MAX_CONTEXT_CHARS = 48_000;
 
@@ -53,8 +61,15 @@ export function buildContext(args: {
   }
 
   const input: ChatMessageInput[] = history
-    .filter((m) => m.role !== 'system' && m.content)
-    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+    .filter((m) => m.role !== 'system' && (m.content || m.attachments?.length))
+    .map((m) => {
+      const images = (m.attachments ?? []).filter((a) => a.kind === 'image' && a.data).map((a) => ({ mime: a.mime, data: a.data! }));
+      return {
+        role: m.role as 'user' | 'assistant',
+        content: messageText(m),
+        ...(images.length ? { images } : {}),
+      };
+    });
   if (tail) input.push(...tail);
 
   let total = input.reduce((n, m) => n + m.content.length, 0);

@@ -29,6 +29,20 @@ export interface Message {
   createdAt: number;
   model?: string;
   stats?: MessageStats;
+  /** Прикреплённые файлы и фото (текст файлов добавляется в запрос при отправке, content остаётся чистым) */
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  id: string;
+  name: string;
+  mime: string;
+  kind: 'text' | 'image';
+  size: number;
+  /** Содержимое текстового файла */
+  text?: string;
+  /** Фото в base64 (уже уменьшенное) */
+  data?: string;
 }
 
 export interface Chat {
@@ -103,6 +117,8 @@ export interface Mode {
 export interface ChatMessageInput {
   role: 'user' | 'assistant';
   content: string;
+  /** Фото, base64 */
+  images?: { mime: string; data: string }[];
 }
 
 export interface StreamParams {

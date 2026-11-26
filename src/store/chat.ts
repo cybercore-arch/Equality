@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { db } from '../db/db';
 import { streamChat } from '../providers';
-import type { Chat, Folder, Message, MessageStats } from '../types';
-import { buildContext } from './prompt';
+import type { Attachment, Chat, Folder, Message, MessageStats } from '../types';
+import { buildContext, messageText } from './prompt';
 import { resolveProvider } from './resolve';
 import { useSettings } from './settings';
 
@@ -97,7 +97,7 @@ interface ChatState {
   toggleFolder: (id: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
 
-  send: (text: string) => Promise<void>;
+  send: (text: string, attachments?: Attachment[]) => Promise<void>;
   regenerate: (instruction?: string) => Promise<void>;
   /** Повторить запрос, если на последнее сообщение пользователя не пришёл ответ */
   retry: () => Promise<void>;
@@ -398,10 +398,10 @@ export const useChat = create<ChatState>((set, get) => {
       }));
     },
 
-    async send(text) {
+    async send(text, attachments) {
       const body = text.trim();
       const chat = currentChat();
-      if (!body || !chat || get().streamingId) return;
+      if ((!body && !attachments?.length) || !chat || get().streamingId) return;
 
       const leafId = get().path[get().path.length - 1] ?? null;
       const user: Message = {
@@ -411,10 +411,11 @@ export const useChat = create<ChatState>((set, get) => {
         role: 'user',
         content: body,
         createdAt: now(),
+        ...(attachments?.length ? { attachments } : {}),
       };
       putMessage(user);
       await db.messages.put(user);
-      await saveLeaf(user.id, chat.title === NEW_TITLE ? { title: body.slice(0, 40) } : {});
+      await saveLeaf(user.id, chat.title === NEW_TITLE ? { title: (body || attachments?.[0]?.name || NEW_TITLE).slice(0, 40) } : {});
       await runGeneration(user.id);
     },
 
@@ -520,8 +521,8 @@ export const useChat = create<ChatState>((set, get) => {
       const chunk = path
         .slice(startIdx, cutoff + 1)
         .map((id) => messages[id])
-        .filter((m) => m && m.role !== 'system' && m.content);
-      let transcript = chunk.map((m) => `${m.role === 'user' ? 'Пользователь' : 'Ассистент'}: ${m.content}`).join('\n\n');
+        .filter((m) => m && m.role !== 'system' && (m.content || m.attachments?.length));
+      let transcript = chunk.map((m) => `${m.role === 'user' ? 'Пользователь' : 'Ассистент'}: ${messageText(m)}`).join('\n\n');
       if (transcript.length > 80_000) transcript = transcript.slice(-80_000);
       const prev = prevIdx >= 0 ? (chat.summary ?? '').trim() : '';
       const prompt = (prev ? `Предыдущая выжимка:\n${prev}\n\nНовые сообщения:\n` : 'Сообщения:\n') + transcript;

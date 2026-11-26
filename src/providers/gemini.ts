@@ -7,7 +7,10 @@ export async function* streamGemini(cfg: ProviderConfig, p: StreamParams): Async
   const body: Record<string, unknown> = {
     contents: p.messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
+      parts: [
+        ...(m.images ?? []).map((i) => ({ inlineData: { mimeType: i.mime, data: i.data } })),
+        ...(m.content || !m.images?.length ? [{ text: m.content }] : []),
+      ],
     })),
     generationConfig: {
       temperature: p.temperature,
