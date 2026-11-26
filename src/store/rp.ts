@@ -1,16 +1,19 @@
 import { create } from 'zustand';
 import { rpdb } from '../db/rpdb';
-import type { Character, Persona } from '../types';
+import type { Character, Lorebook, LoreEntry, Persona } from '../types';
 
 interface RpState {
   characters: Character[];
   personas: Persona[];
+  lorebooks: Lorebook[];
   loaded: boolean;
   load: () => Promise<void>;
   saveCharacter: (c: Character) => Promise<void>;
   deleteCharacter: (id: string) => Promise<void>;
   savePersona: (p: Persona) => Promise<void>;
   deletePersona: (id: string) => Promise<void>;
+  saveLorebook: (b: Lorebook) => Promise<void>;
+  deleteLorebook: (id: string) => Promise<void>;
 }
 
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ru');
@@ -18,12 +21,13 @@ const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(
 export const useRp = create<RpState>((set, get) => ({
   characters: [],
   personas: [],
+  lorebooks: [],
   loaded: false,
 
   async load() {
     if (get().loaded) return;
-    const [characters, personas] = await Promise.all([rpdb.characters.toArray(), rpdb.personas.toArray()]);
-    set({ characters: characters.sort(byName), personas: personas.sort(byName), loaded: true });
+    const [characters, personas, lorebooks] = await Promise.all([rpdb.characters.toArray(), rpdb.personas.toArray(), rpdb.lorebooks.toArray()]);
+    set({ characters: characters.sort(byName), personas: personas.sort(byName), lorebooks: lorebooks.sort(byName), loaded: true });
   },
 
   async saveCharacter(c) {
@@ -46,6 +50,17 @@ export const useRp = create<RpState>((set, get) => ({
   async deletePersona(id) {
     await rpdb.personas.delete(id);
     set((s) => ({ personas: s.personas.filter((x) => x.id !== id) }));
+  },
+
+  async saveLorebook(b) {
+    const next = { ...b, updatedAt: Date.now() };
+    await rpdb.lorebooks.put(next);
+    set((s) => ({ lorebooks: [...s.lorebooks.filter((x) => x.id !== b.id), next].sort(byName) }));
+  },
+
+  async deleteLorebook(id) {
+    await rpdb.lorebooks.delete(id);
+    set((s) => ({ lorebooks: s.lorebooks.filter((x) => x.id !== id) }));
   },
 }));
 
@@ -71,4 +86,11 @@ export const blankCharacter = (): Character => {
 export const blankPersona = (): Persona => {
   const t = Date.now();
   return { id: crypto.randomUUID(), name: '', description: '', createdAt: t, updatedAt: t };
+};
+
+export const blankEntry = (): LoreEntry => ({ id: crypto.randomUUID(), name: '', keys: [], content: '', enabled: true, constant: false, order: 100 });
+
+export const blankLorebook = (): Lorebook => {
+  const t = Date.now();
+  return { id: crypto.randomUUID(), name: '', entries: [], createdAt: t, updatedAt: t };
 };

@@ -100,6 +100,8 @@ interface ChatState {
 
   /** Начать игру с персонажем: приветствие становится первым сообщением (остальные приветствия — свайпами) */
   startWithCharacter: (characterId: string) => Promise<void>;
+  /** Ветка: копия переписки до выбранного сообщения в новом чате */
+  forkFrom: (messageId: string) => Promise<void>;
   send: (text: string, attachments?: Attachment[]) => Promise<void>;
   regenerate: (instruction?: string) => Promise<void>;
   /** Повторить запрос, если на последнее сообщение пользователя не пришёл ответ */
@@ -402,6 +404,39 @@ export const useChat = create<ChatState>((set, get) => {
       }));
     },
 
+    async forkFrom(messageId) {
+      const { messages, path, streamingId } = get();
+      const src = currentChat();
+      const i = path.indexOf(messageId);
+      if (!src || streamingId || i < 0) return;
+      const chatId = uid();
+      const idMap: Record<string, string> = {};
+      const copies: Message[] = [];
+      let parent: string | null = null;
+      for (const id of path.slice(0, i + 1)) {
+        const nid = uid();
+        idMap[id] = nid;
+        copies.push({ ...messages[id], id: nid, chatId, parentId: parent, createdAt: now() });
+        parent = nid;
+      }
+      const t = Date.now();
+      const keepSummary = src.summaryUpToId && idMap[src.summaryUpToId];
+      const chat: Chat = {
+        ...src,
+        id: chatId,
+        title: `${src.title} (ветка)`.slice(0, 80),
+        leafId: parent,
+        createdAt: t,
+        updatedAt: t,
+        summary: keepSummary ? src.summary : undefined,
+        summaryUpToId: keepSummary ? idMap[src.summaryUpToId!] : undefined,
+      };
+      await db.messages.bulkPut(copies);
+      await db.chats.put(chat);
+      set((s) => ({ chats: [chat, ...s.chats] }));
+      await get().selectChat(chatId);
+    },
+
     async startWithCharacter(characterId) {
       const ch = useRp.getState().characters.find((c) => c.id === characterId);
       if (!ch) return;
@@ -427,7 +462,7 @@ export const useChat = create<ChatState>((set, get) => {
       }));
       await db.messages.bulkPut(msgs);
       for (const m of msgs) putMessage(m);
-      await saveLeaf(msgs[0]?.id ?? null, { characterId, modeId: 'rp', title: ch.name.slice(0, 40) });
+      await saveLeaf(msgs[0]?.id ?? null, { characterId, modeId: 'rp', title: ch.name.slice(0, 40), lorebookIds: ch.lorebookId ? [ch.lorebookId] : undefined });
       if (msgs[0]) set((st) => ({ path: pathTo(st.messages, msgs[0].id) }));
     },
 

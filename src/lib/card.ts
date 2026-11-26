@@ -1,4 +1,5 @@
-import type { Character } from '../types';
+import type { Character, Lorebook } from '../types';
+import { lorebookToJson } from './lorebook';
 
 /**
  * Импорт и экспорт карточек персонажей в формате Character Card V2 (SillyTavern, Chub и др.).
@@ -29,7 +30,7 @@ export function cardFromJson(json: unknown): Omit<Character, 'id' | 'createdAt' 
   };
 }
 
-export function cardToJson(c: Character) {
+export function cardToJson(c: Character, book?: Lorebook) {
   return {
     spec: 'chara_card_v2',
     spec_version: '2.0',
@@ -44,7 +45,7 @@ export function cardToJson(c: Character) {
       system_prompt: c.systemPrompt,
       post_history_instructions: '',
       alternate_greetings: c.alternateGreetings,
-      character_book: c.book ?? undefined,
+      character_book: book ? lorebookToJson(book) : c.book ?? undefined,
       tags: c.tags,
       creator: '',
       character_version: '1',
@@ -180,5 +181,5 @@ async function avatarPng(c: Character): Promise<Uint8Array> {
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-export const exportJson = (c: Character) => new Blob([JSON.stringify(cardToJson(c), null, 2)], { type: 'application/json' });
-export const exportPng = async (c: Character) => new Blob([embedPngCard(await avatarPng(c), cardToJson(c)) as BlobPart], { type: 'image/png' });
+export const exportJson = (c: Character, book?: Lorebook) => new Blob([JSON.stringify(cardToJson(c, book), null, 2)], { type: 'application/json' });
+export const exportPng = async (c: Character, book?: Lorebook) => new Blob([embedPngCard(await avatarPng(c), cardToJson(c, book)) as BlobPart], { type: 'image/png' });

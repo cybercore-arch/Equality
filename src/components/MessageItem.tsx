@@ -138,6 +138,7 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
   const continueMessage = useChat((s) => s.continueMessage);
   const editMessage = useChat((s) => s.editMessage);
   const deleteMessage = useChat((s) => s.deleteMessage);
+  const forkFrom = useChat((s) => s.forkFrom);
 
   // Анимируем только свежие сообщения, а не те, что появились при прокрутке старой истории
   const fresh = useRef(m ? Date.now() - m.createdAt < 1500 : false).current;
@@ -257,6 +258,7 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
             {isLast && isUser && <Chip icon="refresh" label="Ответить" disabled={busy} onClick={() => void retry()} />}
             <Chip icon={copied ? 'check' : 'copy'} label={copied ? 'Скопировано' : 'Копировать'} onClick={() => void copy()} />
             {isLast && !isUser && <Chip icon="forward" label="Продолжить" disabled={busy} onClick={() => void continueMessage(id)} />}
+            <Chip icon="chat" label="Ветка" disabled={busy} onClick={() => void forkFrom(id)} />
             <Chip
               icon="edit"
               label="Править"

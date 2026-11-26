@@ -1,4 +1,5 @@
 import { getMode } from '../modes';
+import { activeEntries } from '../lib/lorebook';
 import { useSettings } from './settings';
 import { useRp } from './rp';
 import type { Character, Chat, ChatMessageInput, Message } from '../types';
@@ -41,9 +42,9 @@ function characterPrompt(c: Character): string {
 const MAX_CONTEXT_CHARS = 48_000;
 
 export interface BuiltContext {
-  /** Итоговый системный промпт: слои склеены в порядке «общий → режим → персонаж → персона → чат → выжимка → пожелание» */
+  /** Итоговый системный промпт: слои склеены в порядке «общий → режим → персонаж → персона → чат → выжимка → лорбук → пожелание» */
   system: string;
-  layers: { global: string; mode: string; character: string; persona: string; chat: string; summary: string; instruction: string };
+  layers: { global: string; mode: string; character: string; persona: string; chat: string; summary: string; lore: string; instruction: string };
   /** Сообщения, которые уйдут модели (без тех, что уже заменены выжимкой) */
   input: ChatMessageInput[];
   temperature: number;
@@ -52,6 +53,8 @@ export interface BuiltContext {
   googleSearch: boolean;
   /** Сколько сообщений заменено выжимкой */
   summarizedCount: number;
+  /** Названия записей лорбука, сработавших на этот запрос */
+  loreHits: string[];
 }
 
 /**
@@ -106,6 +109,11 @@ export function buildContext(args: {
   const { character, persona } = resolveRp(chat);
   const sub = (t: string) => fillNames(t, character?.name, persona?.name);
 
+  // Лорбук: ищем ключевые слова в нескольких последних сообщениях
+  const books = useRp.getState().lorebooks.filter((b) => chat.lorebookIds?.includes(b.id));
+  const recent = [...history.map(messageText), ...(tail ?? []).map((t) => t.content)];
+  const hits = books.length ? activeEntries(books, recent) : [];
+
   const layers = {
     global: chat.noGlobalPrompt ? '' : args.globalPrompt.trim(),
     mode: chat.noModePrompt ? '' : mode.systemPrompt,
@@ -114,6 +122,9 @@ export function buildContext(args: {
     chat: (chat.systemPrompt ?? '').trim(),
     summary: summary
       ? `Краткое содержание более ранней части этой переписки (самих сообщений ты уже не видишь):\n${summary}`
+      : '',
+    lore: hits.length
+      ? `[Справочная информация. Учитывай её, когда это уместно, не пересказывай дословно]\n${hits.map((e) => sub(e.content.trim())).join('\n\n')}`
       : '',
     instruction: args.instruction?.trim() ? `[Пожелание пользователя к этому ответу: ${args.instruction.trim()}]` : '',
   };
@@ -127,5 +138,6 @@ export function buildContext(args: {
     maxTokens: chat.maxTokens,
     googleSearch: chat.search ?? (mode.googleSearch && args.searchEnabled),
     summarizedCount,
+    loreHits: hits.map((e) => e.name || e.keys[0] || 'Запись'),
   };
 }

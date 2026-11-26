@@ -43,6 +43,7 @@ export function CharacterEditor({ initial, onClose }: { initial: Character; onCl
   const save = useRp((s) => s.saveCharacter);
   const remove = useRp((s) => s.deleteCharacter);
   const exists = useRp((s) => s.characters.some((c) => c.id === initial.id));
+  const lorebooks = useRp((s) => s.lorebooks);
   const [c, setC] = useState<Character>(initial);
   const [note, setNote] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -68,7 +69,8 @@ export function CharacterEditor({ initial, onClose }: { initial: Character; onCl
   const doExport = async (kind: 'json' | 'png') => {
     const card = { ...c, name: c.name.trim() || 'character' };
     try {
-      const blob = kind === 'json' ? exportJson(card) : await exportPng(card);
+      const book = lorebooks.find((b) => b.id === c.lorebookId);
+      const blob = kind === 'json' ? exportJson(card, book) : await exportPng(card, book);
       await saveFile(`${card.name}.${kind}`, blob);
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'Не удалось сохранить файл');
@@ -128,6 +130,23 @@ export function CharacterEditor({ initial, onClose }: { initial: Character; onCl
               Добавить приветствие
             </button>
           </Collapsible>
+
+          <label className="block text-sm">
+            <span className="text-zinc-300">Лорбук персонажа</span>
+            <span className="ml-2 text-xs text-zinc-500">подключается к новым чатам с ним</span>
+            <select
+              value={c.lorebookId ?? ''}
+              onChange={(e) => set({ lorebookId: e.target.value || undefined })}
+              className="mt-1.5 w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none"
+            >
+              <option value="">Без лорбука</option>
+              {lorebooks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <Collapsible title="Дополнительно" hint="пример диалога, свой промпт, заметки">
             <Field label="Пример диалога" hint="как персонаж говорит" value={c.exampleDialogue} onChange={(v) => set({ exampleDialogue: v })} rows={6} />

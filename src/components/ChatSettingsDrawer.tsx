@@ -85,6 +85,7 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
   const setChatMode = useChat((s) => s.setChatMode);
   const summarizeContext = useChat((s) => s.summarizeContext);
   const setSummary = useChat((s) => s.setSummary);
+  const lorebooks = useRp((s) => s.lorebooks);
   const characters = useRp((s) => s.characters);
   const personas = useRp((s) => s.personas);
   const defaultPersonaId = useSettings((s) => s.defaultPersonaId);
@@ -171,6 +172,34 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
               <p className="text-xs text-zinc-500">Смена персонажа в середине чата меняет только то, как модель играет дальше. Приветствие не добавляется.</p>
             </Collapsible>
           )}
+
+          <Collapsible
+            title="Лорбуки"
+            hint={chat.lorebookIds?.length ? `Подключено: ${chat.lorebookIds.filter((id) => lorebooks.some((b) => b.id === id)).length}` : 'не подключены'}
+          >
+            {lorebooks.length === 0 && <p className="text-xs text-zinc-500">Лорбуков пока нет. Создай их в Настройки → Персонажи и персоны.</p>}
+            {lorebooks.map((b) => {
+              const on = chat.lorebookIds?.includes(b.id) ?? false;
+              return (
+                <label key={b.id} className="flex items-center gap-3 text-sm text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => {
+                      const cur = chat.lorebookIds ?? [];
+                      void updateChat(chat.id, { lorebookIds: on ? cur.filter((x) => x !== b.id) : [...cur, b.id] });
+                    }}
+                    className="h-4 w-4 accent-[rgb(var(--accent-rgb))]"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{b.name}</span>
+                  <span className="text-xs text-zinc-500">{b.entries.length}</span>
+                </label>
+              );
+            })}
+            {ctx.loreHits.length > 0 && (
+              <p className="text-xs text-zinc-500">В следующем запросе сработали: {ctx.loreHits.join(', ')}</p>
+            )}
+          </Collapsible>
 
           <Collapsible title="Параметры" hint={`Температура ${Number(ctx.temperature.toFixed(2))} · Top-P ${Number(ctx.topP.toFixed(2))}`} defaultOpen>
             <Param

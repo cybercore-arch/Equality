@@ -79,6 +79,8 @@ export interface Chat {
   /** Ролплей: персонаж и персона этого чата (персона пусто = по умолчанию) */
   characterId?: string;
   personaId?: string;
+  /** Подключённые к чату лорбуки */
+  lorebookIds?: string[];
 }
 
 export interface ModelInfo {
@@ -155,6 +157,8 @@ export interface Character {
   avatar?: string;
   /** Встроенный лорбук карточки в исходном виде (будет использоваться в этапе 4B, при экспорте сохраняется) */
   book?: unknown;
+  /** Лорбук, связанный с карточкой (подключается к чатам с этим персонажем) */
+  lorebookId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -164,6 +168,27 @@ export interface Persona {
   id: string;
   name: string;
   description: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Запись лорбука: срабатывает, когда в недавней переписке встречается одно из ключевых слов. */
+export interface LoreEntry {
+  id: string;
+  name: string;
+  keys: string[];
+  content: string;
+  enabled: boolean;
+  /** Всегда включена, независимо от ключей */
+  constant: boolean;
+  /** Чем больше число, тем раньше запись попадает в запрос (важнее) */
+  order: number;
+}
+
+export interface Lorebook {
+  id: string;
+  name: string;
+  entries: LoreEntry[];
   createdAt: number;
   updatedAt: number;
 }
