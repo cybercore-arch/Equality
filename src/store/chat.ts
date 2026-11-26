@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { db } from '../db/db';
 import { streamChat } from '../providers';
 import type { Attachment, Chat, Folder, Message, MessageStats } from '../types';
+import { estimateTokens } from '../lib/tokens';
 import { buildContext, fillNames, messageText } from './prompt';
 import { useRp } from './rp';
 import { resolveProvider } from './resolve';
@@ -82,6 +83,9 @@ interface ChatState {
   statusNote: string | null;
   /** Идёт сжатие контекста */
   summarizing: boolean;
+  /** Нейтральное сообщение для пользователя (например, «контекст сжат автоматически»), привязано к чату */
+  notice: { chatId: string; text: string } | null;
+  clearNotice: () => void;
   error: string | null;
 
   init: () => Promise<void>;
@@ -99,7 +103,7 @@ interface ChatState {
   deleteFolder: (id: string) => Promise<void>;
 
   /** Начать игру с персонажем: приветствие становится первым сообщением (остальные приветствия — свайпами) */
-  startWithCharacter: (characterId: string) => Promise<void>;
+  startWithCharacter: (characterId: string, personaId?: string) => Promise<void>;
   /** Ветка: копия переписки до выбранного сообщения в новом чате */
   forkFrom: (messageId: string) => Promise<void>;
   send: (text: string, attachments?: Attachment[]) => Promise<void>;
@@ -111,7 +115,7 @@ interface ChatState {
   deleteMessage: (id: string) => Promise<void>;
   swipe: (messageId: string, dir: -1 | 1) => Promise<void>;
   /** Сжать старую часть переписки в выжимку (сами сообщения не удаляются) */
-  summarizeContext: () => Promise<void>;
+  summarizeContext: (opts?: { auto?: boolean }) => Promise<'ok' | 'skip' | 'abort'>;
   /** Вручную поправить текст выжимки; пустой текст сбрасывает её */
   setSummary: (text: string) => Promise<void>;
   stop: () => void;
@@ -151,6 +155,14 @@ export const useChat = create<ChatState>((set, get) => {
     });
   }
 
+  /** Пора ли сжимать: оценка запроса перевалила за 80% от размера контекста модели (или за 16K, если он неизвестен). */
+  function needsAutoSummary(chat: Chat, ctx: ReturnType<typeof buildContext>): boolean {
+    if (!useSettings.getState().autoSummary || chat.noAutoSummary) return false;
+    const limit = chat.contextLimit ?? 16_000;
+    const tokens = estimateTokens(ctx.system) + ctx.input.reduce((n, m) => n + estimateTokens(m.content), 0);
+    return tokens > limit * 0.8;
+  }
+
   async function runGeneration(parentId: string | null, opts: GenOpts = {}) {
     const chat = currentChat();
     if (!chat) return;
@@ -169,8 +181,8 @@ export const useChat = create<ChatState>((set, get) => {
 
     // Дописывание: показываем модели её же незаконченный ответ и просим продолжить
     const existing = opts.continueId ? get().messages[opts.continueId] : undefined;
-    const ctx = buildContext({
-      chat,
+    const build = () => buildContext({
+      chat: currentChat() ?? chat,
       messages: get().messages,
       path: pathTo(get().messages, parentId),
       globalPrompt: settings.globalPrompt,
@@ -183,6 +195,7 @@ export const useChat = create<ChatState>((set, get) => {
           ]
         : undefined,
     });
+    let ctx = build();
 
     const base = existing?.content ?? '';
     const assistant: Message = existing ?? {
@@ -196,6 +209,28 @@ export const useChat = create<ChatState>((set, get) => {
     };
     if (!existing) putMessage(assistant);
     set({ streamingId: assistant.id, streamText: base, error: null });
+
+    // Автосжатие: если контекст почти заполнен, сначала сжимаем старую часть переписки
+    if (!existing && needsAutoSummary(chat, ctx)) {
+      set({ statusNote: 'Контекст почти заполнен, сжимаю старую часть переписки…' });
+      const res = await get().summarizeContext({ auto: true });
+      set({ statusNote: null });
+      if (res === 'abort') {
+        removeMessage(assistant);
+        await saveLeaf(parentId);
+        set({ streamingId: null, streamText: '' });
+        return;
+      }
+      if (res === 'ok') {
+        ctx = build();
+        set({
+          notice: {
+            chatId: chat.id,
+            text: 'Контекст был почти заполнен, поэтому старая часть переписки автоматически сжата в выжимку. Посмотреть и поправить её: настройки чата → Контекст. Отключить автосжатие: Настройки → Автосжатие контекста.',
+          },
+        });
+      }
+    }
 
     abortCtl = new AbortController();
     const signal = abortCtl.signal;
@@ -293,6 +328,8 @@ export const useChat = create<ChatState>((set, get) => {
     streamText: '',
     statusNote: null,
     summarizing: false,
+    notice: null,
+    clearNotice: () => set({ notice: null }),
     error: null,
 
     async init() {
@@ -437,7 +474,7 @@ export const useChat = create<ChatState>((set, get) => {
       await get().selectChat(chatId);
     },
 
-    async startWithCharacter(characterId) {
+    async startWithCharacter(characterId, personaId) {
       const ch = useRp.getState().characters.find((c) => c.id === characterId);
       if (!ch) return;
       get().stop();
@@ -449,7 +486,7 @@ export const useChat = create<ChatState>((set, get) => {
         set((s) => ({ chats: [cur!, ...s.chats], chatId: cur!.id, messages: {}, children: {}, path: [], error: null }));
       }
       const { personas } = useRp.getState();
-      const pid = cur.personaId ?? useSettings.getState().defaultPersonaId;
+      const pid = personaId ?? cur.personaId ?? useSettings.getState().defaultPersonaId;
       const userName = personas.find((p) => p.id === pid)?.name;
       const greetings = [ch.firstMessage, ...ch.alternateGreetings].map((g) => g.trim()).filter(Boolean);
       const msgs: Message[] = greetings.map((g) => ({
@@ -462,7 +499,7 @@ export const useChat = create<ChatState>((set, get) => {
       }));
       await db.messages.bulkPut(msgs);
       for (const m of msgs) putMessage(m);
-      await saveLeaf(msgs[0]?.id ?? null, { characterId, modeId: 'rp', title: ch.name.slice(0, 40), lorebookIds: ch.lorebookId ? [ch.lorebookId] : undefined });
+      await saveLeaf(msgs[0]?.id ?? null, { characterId, modeId: 'rp', title: ch.name.slice(0, 40), lorebookIds: ch.lorebookId ? [ch.lorebookId] : undefined, ...(personaId ? { personaId } : {}) });
       if (msgs[0]) set((st) => ({ path: pathTo(st.messages, msgs[0].id) }));
     },
 
@@ -565,25 +602,27 @@ export const useChat = create<ChatState>((set, get) => {
       await saveLeaf(leaf);
     },
 
-    async summarizeContext() {
+    async summarizeContext(opts) {
+      const auto = !!opts?.auto;
       const chat = currentChat();
       const { path, messages, streamingId, summarizing } = get();
-      if (!chat || streamingId || summarizing) return;
+      if (!chat || (streamingId && !auto) || summarizing) return 'skip';
 
       // Сжимаем всё, что ещё не сжато, кроме нескольких последних сообщений
       const prevIdx = chat.summaryUpToId ? path.indexOf(chat.summaryUpToId) : -1;
       const startIdx = prevIdx + 1;
       const cutoff = path.length - 1 - KEEP_RECENT;
-      if (cutoff < startIdx + 1) {
-        set({ error: 'Пока нечего сжимать: в чате мало новых сообщений.' });
-        return;
+      // При автосжатии ждём, пока накопится заметный кусок, чтобы не сжимать после каждого сообщения
+      if (cutoff < startIdx + (auto ? 3 : 1)) {
+        if (!auto) set({ error: 'Пока нечего сжимать: в чате мало новых сообщений.' });
+        return 'skip';
       }
 
       const settings = useSettings.getState();
       const provider = resolveProvider(chat, settings);
       if (!provider.apiKey.trim() && provider.id !== 'custom') {
-        set({ error: `Добавь API-ключ для «${provider.name}» в настройках.` });
-        return;
+        if (!auto) set({ error: `Добавь API-ключ для «${provider.name}» в настройках.` });
+        return 'skip';
       }
 
       const chunk = path
@@ -598,6 +637,8 @@ export const useChat = create<ChatState>((set, get) => {
       set({ summarizing: true, error: null });
       abortCtl = new AbortController();
       let acc = '';
+      let aborted = false;
+      let failed = '';
       try {
         const stream = streamChat(provider, {
           messages: [{ role: 'user', content: prompt }],
@@ -609,13 +650,22 @@ export const useChat = create<ChatState>((set, get) => {
         });
         for await (const part of stream) acc += part;
       } catch (e) {
-        if ((e as Error).name !== 'AbortError') set({ error: (e as Error).message || 'Не удалось сжать контекст' });
+        if ((e as Error).name === 'AbortError') aborted = true;
+        else failed = (e as Error).message || 'Не удалось сжать контекст';
       } finally {
         abortCtl = null;
         set({ summarizing: false });
       }
 
-      if (acc.trim()) await get().updateChat(chat.id, { summary: acc.trim(), summaryUpToId: path[cutoff] });
+      if (aborted) return 'abort';
+      if (failed) {
+        if (auto) set({ notice: { chatId: chat.id, text: 'Контекст почти заполнен, но сжать его автоматически не получилось. Ответ всё равно будет сгенерирован. Можно сжать вручную: настройки чата → Контекст.' } });
+        else set({ error: failed });
+        return 'skip';
+      }
+      if (!acc.trim()) return 'skip';
+      await get().updateChat(chat.id, { summary: acc.trim(), summaryUpToId: path[cutoff] });
+      return 'ok';
     },
 
     async setSummary(text) {

@@ -4,6 +4,7 @@ import { useChat } from '../store/chat';
 import { useRp } from '../store/rp';
 import { Avatar } from './Avatar';
 import { CharactersScreen } from './CharactersScreen';
+import { Wizard } from './Wizard';
 import { MessageItem } from './MessageItem';
 import { ModePicker } from './ModePicker';
 
@@ -22,6 +23,7 @@ function EmptyState() {
   const start = useChat((s) => s.startWithCharacter);
   const characters = useRp((s) => s.characters);
   const [library, setLibrary] = useState(false);
+  const [wizard, setWizard] = useState(false);
   return (
     <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center px-6 py-8">
       <h2 className="anim-rise font-display text-3xl font-semibold tracking-tight">{greeting()}</h2>
@@ -36,6 +38,9 @@ function EmptyState() {
       )}
       {chat?.modeId === 'rp' && (
         <div className="anim-rise mt-6">
+          <button onClick={() => setWizard(true)} className="mb-4 w-full rounded-2xl border border-fg/20 py-2.5 text-sm text-zinc-200 transition-colors hover:bg-fg/5">
+            Не знаю, с чего начать
+          </button>
           <div className="mb-2 text-xs uppercase tracking-widest text-zinc-500">Персонаж</div>
           <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-2">
             {characters.map((c) => (
@@ -54,6 +59,7 @@ function EmptyState() {
           )}
         </div>
       )}
+      {wizard && <Wizard onClose={() => setWizard(false)} />}
       {library && <CharactersScreen onClose={() => setLibrary(false)} onPick={(id) => void start(id)} />}
     </div>
   );

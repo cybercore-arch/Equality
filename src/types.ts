@@ -81,6 +81,8 @@ export interface Chat {
   personaId?: string;
   /** Подключённые к чату лорбуки */
   lorebookIds?: string[];
+  /** Не сжимать этот чат автоматически */
+  noAutoSummary?: boolean;
 }
 
 export interface ModelInfo {

@@ -30,6 +30,8 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
   const [providers, setProviders] = useState(false);
   const [prompt, setPrompt] = useState(false);
   const [library, setLibrary] = useState(false);
+  const autoSummary = useSettings((s) => s.autoSummary);
+  const setAutoSummary = useSettings((s) => s.setAutoSummary);
   const rpCount = useRp((s) => s.characters.length);
   const globalPrompt = useSettings((s) => s.globalPrompt);
   const active = useSettings((s) => s.providers.find((p) => p.id === s.activeProvider));
@@ -59,6 +61,20 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
               hint={globalPrompt.trim() ? globalPrompt.trim().replace(/\s+/g, ' ').slice(0, 60) : 'Не задан. Добавляется во все чаты'}
               onClick={() => setPrompt(true)}
             />
+            <button
+              onClick={() => setAutoSummary(!autoSummary)}
+              role="switch"
+              aria-checked={autoSummary}
+              className="flex w-full items-center gap-3 rounded-2xl bg-zinc-900 px-4 py-3.5 text-left transition-colors hover:bg-zinc-800"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Автосжатие контекста</span>
+                <span className="block text-xs text-zinc-500">Когда контекст почти заполнен, старая часть переписки сжимается сама, и ты получаешь уведомление</span>
+              </span>
+              <span className={`relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 ${autoSummary ? 'bg-fg' : 'bg-zinc-700'}`}>
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full transition-all duration-200 ${autoSummary ? 'left-[1.1rem] bg-zinc-950' : 'left-0.5 bg-zinc-400'}`} />
+              </span>
+            </button>
             <Row
               title="Подключение к ИИ"
               hint={active ? `По умолчанию: ${PROVIDER_LABEL[active.id]} · ${active.model || 'модель не выбрана'}` : ''}

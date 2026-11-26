@@ -325,6 +325,14 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
               />
             </label>
 
+            <div className="flex items-start gap-3">
+              <Switch checked={!chat.noAutoSummary} onChange={(v) => void updateChat(chat.id, { noAutoSummary: !v })} label="Автосжатие" />
+              <div className="min-w-0 text-sm">
+                <div className="text-zinc-300">Автосжатие в этом чате</div>
+                <div className="text-xs text-zinc-500">Когда контекст заполнен на 80%, старая часть сама сожмётся в выжимку. Общий выключатель: Настройки.</div>
+              </div>
+            </div>
+
             <div>
               <button
                 onClick={() => void summarizeContext()}

@@ -23,6 +23,8 @@ export function Composer() {
   const busy = useChat((s) => s.streamingId !== null);
   const error = useChat((s) => s.error);
   const clearError = useChat((s) => s.clearError);
+  const notice = useChat((s) => (s.notice && s.notice.chatId === s.chatId ? s.notice.text : null));
+  const clearNotice = useChat((s) => s.clearNotice);
   const retry = useChat((s) => s.retry);
   const canRetry = useChat((s) => s.messages[s.path[s.path.length - 1]]?.role === 'user');
 
@@ -59,6 +61,14 @@ export function Composer() {
 
   return (
     <div className="glass border-t border-fg/5 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+      {notice && (
+        <div className="anim-fade mb-2 flex items-start gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-300">
+          <span className="min-w-0 flex-1">{notice}</span>
+          <button onClick={clearNotice} aria-label="Закрыть">
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      )}
       {error && (
         <div className="mb-2 flex items-start gap-2 rounded-lg bg-red-950/60 px-3 py-2 text-sm text-red-200">
           <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{error}</span>

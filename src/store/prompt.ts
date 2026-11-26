@@ -104,7 +104,9 @@ export function buildContext(args: {
   if (tail) input.push(...tail);
 
   let total = input.reduce((n, m) => n + m.content.length, 0);
-  while (input.length > 2 && total > MAX_CONTEXT_CHARS) total -= input.shift()!.content.length;
+  // Страховочная обрезка: если контекст модели большой, запас пропорционально больше
+  const maxChars = Math.max(MAX_CONTEXT_CHARS, Math.round((chat.contextLimit ?? 0) * 3.2 * 0.95));
+  while (input.length > 2 && total > maxChars) total -= input.shift()!.content.length;
 
   const { character, persona } = resolveRp(chat);
   const sub = (t: string) => fillNames(t, character?.name, persona?.name);

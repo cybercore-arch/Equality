@@ -34,6 +34,9 @@ interface SettingsState {
   setGlobalPrompt: (v: string) => void;
   /** Персона игрока по умолчанию для ролплея */
   defaultPersonaId: string | null;
+  /** Автоматически сжимать старую часть переписки, когда контекст почти заполнен */
+  autoSummary: boolean;
+  setAutoSummary: (v: boolean) => void;
   setDefaultPersona: (id: string | null) => void;
   updateProvider: (id: ProviderKind, patch: Partial<ProviderConfig>) => void;
   setActiveProvider: (id: ProviderKind) => void;
@@ -53,6 +56,8 @@ export const useSettings = create<SettingsState>()(
       globalPrompt: '',
       setGlobalPrompt: (v) => set({ globalPrompt: v }),
       defaultPersonaId: null,
+      autoSummary: true,
+      setAutoSummary: (v) => set({ autoSummary: v }),
       setDefaultPersona: (id) => set({ defaultPersonaId: id }),
       updateProvider: (id, patch) =>
         set((s) => ({ providers: s.providers.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
