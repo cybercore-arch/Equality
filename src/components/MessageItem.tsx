@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { dataUrl } from '../lib/attachments';
+import { stripWidgetTags } from '../widgets/registry';
 import { ROOT, useChat } from '../store/chat';
 import type { MessageStats } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -152,7 +153,9 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
   if (!m) return null;
   const isUser = m.role === 'user';
   const streaming = streamText !== null;
-  const text = streaming ? streamText : m.content;
+  const raw = streaming ? streamText : m.content;
+  // Служебные теги виджетов (<phone>, <status>, <roll>) пользователю не показываем
+  const text = isUser ? raw : stripWidgetTags(raw);
   const idx = sibs ? sibs.indexOf(id) : 0;
   const count = sibs?.length ?? 1;
   const showActions = !streaming && !editing && (isLast || showMore);
@@ -219,7 +222,7 @@ export const MessageItem = memo(function MessageItem({ id, isLast }: { id: strin
               {text && <div className="whitespace-pre-wrap break-words">{text}</div>}
             </>
           ) : (
-            <Markdown text={text} />
+            text ? <Markdown text={text} /> : <span className="text-xs italic opacity-60">обновил виджет</span>
           )}
         </div>
 

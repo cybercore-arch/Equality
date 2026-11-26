@@ -12,6 +12,7 @@ export function Composer() {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [fileError, setFileError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const updateChat = useChat((s) => s.updateChat);
   const chat = useChat((s) => s.chats.find((c) => c.id === s.chatId));
   const settings = useSettings();
   const provider = chat ? resolveProvider(chat, settings) : undefined;
@@ -125,6 +126,15 @@ export function Composer() {
       )}
       <div className="flex items-end gap-2">
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => void addFiles(e.target.files)} />
+        {chat?.widgets && chat.widgets.length > 0 && (
+          <button
+            onClick={() => void updateChat(chat.id, { widgetsOpen: !chat.widgetsOpen })}
+            className={`flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-2xl transition-colors ${chat.widgetsOpen ? 'bg-fg/15 text-zinc-50' : 'text-zinc-400'}`}
+            aria-label="Виджеты"
+          >
+            <Icon name="grid" />
+          </button>
+        )}
         <button
           onClick={() => fileRef.current?.click()}
           disabled={busy}

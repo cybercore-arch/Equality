@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../db/db';
 import { streamChat } from '../providers';
-import type { Attachment, Chat, Folder, Message, MessageStats } from '../types';
+import type { Attachment, Chat, Folder, Message, MessageStats, WidgetOp } from '../types';
 import { estimateTokens } from '../lib/tokens';
 import { buildContext, fillNames, messageText } from './prompt';
 import { useRp } from './rp';
@@ -106,7 +106,7 @@ interface ChatState {
   startWithCharacter: (characterId: string, personaId?: string) => Promise<void>;
   /** Ветка: копия переписки до выбранного сообщения в новом чате */
   forkFrom: (messageId: string) => Promise<void>;
-  send: (text: string, attachments?: Attachment[]) => Promise<void>;
+  send: (text: string, attachments?: Attachment[], widgetOps?: WidgetOp[]) => Promise<void>;
   regenerate: (instruction?: string) => Promise<void>;
   /** Повторить запрос, если на последнее сообщение пользователя не пришёл ответ */
   retry: () => Promise<void>;
@@ -503,7 +503,7 @@ export const useChat = create<ChatState>((set, get) => {
       if (msgs[0]) set((st) => ({ path: pathTo(st.messages, msgs[0].id) }));
     },
 
-    async send(text, attachments) {
+    async send(text, attachments, widgetOps) {
       const body = text.trim();
       const chat = currentChat();
       if ((!body && !attachments?.length) || !chat || get().streamingId) return;
@@ -517,6 +517,7 @@ export const useChat = create<ChatState>((set, get) => {
         content: body,
         createdAt: now(),
         ...(attachments?.length ? { attachments } : {}),
+        ...(widgetOps?.length ? { widgetOps } : {}),
       };
       putMessage(user);
       await db.messages.put(user);

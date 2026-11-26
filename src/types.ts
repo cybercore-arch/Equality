@@ -31,7 +31,11 @@ export interface Message {
   stats?: MessageStats;
   /** Прикреплённые файлы и фото (текст файлов добавляется в запрос при отправке, content остаётся чистым) */
   attachments?: Attachment[];
+  /** Действия пользователя в виджетах (телефон, кубики): из них вычисляется состояние виджетов */
+  widgetOps?: WidgetOp[];
 }
+
+export type WidgetOp = { w: string; t: string; [k: string]: unknown };
 
 export interface Attachment {
   id: string;
@@ -83,6 +87,9 @@ export interface Chat {
   lorebookIds?: string[];
   /** Не сжимать этот чат автоматически */
   noAutoSummary?: boolean;
+  /** Включённые в этом чате виджеты и открыта ли их панель */
+  widgets?: string[];
+  widgetsOpen?: boolean;
 }
 
 export interface ModelInfo {

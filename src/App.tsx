@@ -9,6 +9,7 @@ import { Composer } from './components/Composer';
 import { ModelSheet } from './components/ModelSheet';
 import { Sidebar } from './components/Sidebar';
 import { Welcome } from './components/Welcome';
+import { WidgetDock } from './components/WidgetDock';
 import { useChat } from './store/chat';
 import { useSettings } from './store/settings';
 import { applyTheme, useTheme } from './store/theme';
@@ -53,6 +54,7 @@ export default function App() {
           onSettings={() => setChatSettings(true)}
         />
         <ChatView />
+        <WidgetDock />
         <Composer />
       </main>
 

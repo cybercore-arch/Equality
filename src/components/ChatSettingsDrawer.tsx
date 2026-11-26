@@ -5,6 +5,7 @@ import { getMode } from '../modes';
 import { useChat } from '../store/chat';
 import { buildContext } from '../store/prompt';
 import { useRp } from '../store/rp';
+import { WIDGETS } from '../widgets/registry';
 import { useSettings } from '../store/settings';
 import { Collapsible } from './Collapsible';
 import { Icon } from './Icon';
@@ -172,6 +173,33 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
               <p className="text-xs text-zinc-500">Смена персонажа в середине чата меняет только то, как модель играет дальше. Приветствие не добавляется.</p>
             </Collapsible>
           )}
+
+          <Collapsible title="Виджеты" hint={chat.widgets?.length ? `Включено: ${chat.widgets.length}` : 'не включены'}>
+            <p className="text-xs text-zinc-500">
+              Интерактивные панели над полем ввода. Модель управляет ими тегами в своих ответах (ты их не видишь как текст), а твои действия в виджете уходят ей как обычные сообщения. Работает в любом режиме.
+            </p>
+            {WIDGETS.map((w) => {
+              const on = chat.widgets?.includes(w.id) ?? false;
+              return (
+                <label key={w.id} className="flex items-start gap-3 text-sm text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => {
+                      const cur = chat.widgets ?? [];
+                      const next = on ? cur.filter((x) => x !== w.id) : [...cur, w.id];
+                      void updateChat(chat.id, { widgets: next, widgetsOpen: next.length ? true : chat.widgetsOpen });
+                    }}
+                    className="mt-0.5 h-4 w-4 accent-[rgb(var(--accent-rgb))]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block">{w.name}</span>
+                    <span className="block text-xs text-zinc-500">{w.description}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </Collapsible>
 
           <Collapsible
             title="Лорбуки"
