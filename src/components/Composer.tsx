@@ -126,7 +126,7 @@ export function Composer() {
       )}
       <div className="flex items-end gap-2">
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => void addFiles(e.target.files)} />
-        {chat?.widgets && chat.widgets.length > 0 && (
+        {chat?.widgets?.some((w) => w !== 'status') && (
           <button
             onClick={() => void updateChat(chat.id, { widgetsOpen: !chat.widgetsOpen })}
             className={`flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-2xl transition-colors ${chat.widgetsOpen ? 'bg-fg/15 text-zinc-50' : 'text-zinc-400'}`}

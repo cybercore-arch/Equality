@@ -71,26 +71,6 @@ function render(){
 }
 </script>`;
 
-const STATUS = `
-<div id="app"></div>
-<script>
-function render(){
-  const app=$('#app');app.textContent='';
-  if(!S.fields.length){app.append(el('div',{style:'color:var(--muted);padding:6px 0'},'Панель пуста. Модель заполнит её по ходу игры.'));return}
-  const grid=el('div',{style:'display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px'});
-  for(const [k,v] of S.fields){
-    const m=/^\\s*(-?\\d+(?:[.,]\\d+)?)\\s*\\/\\s*(\\d+(?:[.,]\\d+)?)\\s*$/.exec(v);
-    const card=el('div',{class:'pop',style:'background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 10px'},
-      el('div',{style:'color:var(--muted);font-size:12px;text-transform:capitalize'},k),
-      el('div',{style:'font-weight:600;word-break:break-word'},v));
-    if(m){const p=Math.max(0,Math.min(100,parseFloat(m[1].replace(',','.'))/parseFloat(m[2].replace(',','.'))*100));
-      card.append(el('div',{style:'height:5px;border-radius:99px;background:var(--line);margin-top:6px;overflow:hidden'},el('div',{style:'height:100%;width:'+p+'%;background:var(--accent);transition:width .5s'})))}
-    grid.append(card);
-  }
-  app.append(grid);
-}
-</script>`;
-
 const ROLL = `
 <div id="app"></div>
 <script>
@@ -121,7 +101,7 @@ function render(){
 }
 </script>`;
 
-const PAGES: Record<WidgetId, string> = { phone: PHONE, status: STATUS, roll: ROLL };
+const PAGES = { phone: PHONE, roll: ROLL };
 
-export const widgetHtml = (id: WidgetId) =>
+export const widgetHtml = (id: Exclude<WidgetId, 'status'>) =>
   `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${BASE}</head><body>${PAGES[id]}</body></html>`;

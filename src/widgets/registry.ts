@@ -28,6 +28,9 @@ export interface WidgetStates {
   roll: RollState;
 }
 
+/** Виджеты, которые рисуются в окне над полем ввода (статус показывается полоской под шапкой) */
+export const FRAME_WIDGETS: WidgetId[] = ['phone', 'roll'];
+
 export const WIDGETS: { id: WidgetId; name: string; description: string }[] = [
   { id: 'phone', name: 'Телефон', description: 'Мессенджер: персонажи пишут тебе, ты отвечаешь' },
   { id: 'status', name: 'Статус', description: 'Панель параметров: здоровье, место, настроение и т.д.' },
@@ -138,5 +141,11 @@ export function widgetPrompt(enabled: string[], st: WidgetStates): string {
         (st.roll.pending ? `\nСейчас ожидается бросок ${st.roll.pending.d}: ${st.roll.pending.reason}` : ''),
     );
   }
-  return parts.length ? `[Интерактивные виджеты]\n${parts.join('\n\n')}` : '';
+  if (!parts.length) return '';
+  const tags = [enabled.includes('phone') && '<phone>', enabled.includes('status') && '<status>', enabled.includes('roll') && '<roll>'].filter(Boolean).join(', ');
+  parts.push(
+    `Существуют ТОЛЬКО теги: ${tags}. Других тегов нет: не придумывай новые (погоду, время, инвентарь и т.п. пиши обычным текстом` +
+      `${enabled.includes('status') ? ' или в <status>' : ''}). Каждый тег делает только то, что описано выше.`,
+  );
+  return `[Интерактивные виджеты]\n${parts.join('\n\n')}`;
 }

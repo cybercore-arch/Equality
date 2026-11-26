@@ -8,6 +8,7 @@ import { ChatView } from './components/ChatView';
 import { Composer } from './components/Composer';
 import { ModelSheet } from './components/ModelSheet';
 import { Sidebar } from './components/Sidebar';
+import { StatusStrip } from './components/StatusStrip';
 import { Welcome } from './components/Welcome';
 import { WidgetDock } from './components/WidgetDock';
 import { useChat } from './store/chat';
@@ -60,6 +61,7 @@ export default function App() {
           onModel={() => setModelSheet(true)}
           onSettings={() => setChatSettings(true)}
         />
+        <StatusStrip />
         <ChatView />
         <WidgetDock />
         <Composer />
