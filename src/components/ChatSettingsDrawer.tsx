@@ -3,9 +3,11 @@ import { useOverlay } from '../lib/overlay';
 import { estimateTokens, formatContext } from '../lib/tokens';
 import { getMode } from '../modes';
 import { useChat } from '../store/chat';
-import { buildContext } from '../store/prompt';
+import { buildContext, resolveRp } from '../store/prompt';
 import { useRp } from '../store/rp';
-import { WIDGETS } from '../widgets/registry';
+import { WIDGETS, stripWidgetTags } from '../widgets/registry';
+import { chatToMarkdown } from '../lib/backup';
+import { saveFile } from '../lib/saveFile';
 import { useSettings } from '../store/settings';
 import { Collapsible } from './Collapsible';
 import { Icon } from './Icon';
@@ -278,6 +280,29 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
                 </div>
               </div>
             </div>
+          </Collapsible>
+
+          <Collapsible title="Экспорт чата" hint="Текущая ветка в файл">
+            <p className="text-xs text-zinc-500">Сохраняет переписку выбранной ветки (без служебных тегов виджетов) в текстовый файл.</p>
+            <button
+              onClick={() => {
+                const rp = resolveRp(chat);
+                const byId = new Map(messages.map((m) => [m.id, m]));
+                const list = path.map((id) => byId.get(id)).filter((m): m is NonNullable<typeof m> => !!m);
+                const md = chatToMarkdown({
+                  title: chat.title || 'Чат',
+                  messages: list,
+                  userName: rp.persona?.name || 'Вы',
+                  assistantName: rp.character?.name || 'ИИ',
+                  strip: stripWidgetTags,
+                });
+                const safe = (chat.title || 'chat').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 40);
+                void saveFile(`${safe}.md`, new Blob([md], { type: 'text/markdown' }));
+              }}
+              className="w-full rounded-xl bg-zinc-800 py-2 text-sm text-zinc-200"
+            >
+              Сохранить как .md
+            </button>
           </Collapsible>
 
           <Collapsible title="Системный промпт" hint={ctx.system ? `${fmt(ctx.system.length)} символов` : 'пусто'}>
