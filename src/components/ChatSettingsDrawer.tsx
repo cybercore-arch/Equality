@@ -287,8 +287,7 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
             <button
               onClick={() => {
                 const rp = resolveRp(chat);
-                const byId = new Map(messages.map((m) => [m.id, m]));
-                const list = path.map((id) => byId.get(id)).filter((m): m is NonNullable<typeof m> => !!m);
+                const list = path.map((id) => messages[id]).filter((m) => !!m);
                 const md = chatToMarkdown({
                   title: chat.title || 'Чат',
                   messages: list,
