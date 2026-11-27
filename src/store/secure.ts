@@ -19,13 +19,12 @@ interface KeyVaultPlugin {
 // Своё хранилище на Android Keystore (исходники: native/KeyVaultPlugin.java)
 const KeyVault = registerPlugin<KeyVaultPlugin>('KeyVault');
 
-async function plugin() {
-  return KeyVault;
-}
+// ВАЖНО: плагин Capacitor нельзя возвращать из async-функции или передавать в await:
+// у него на любое свойство, включая `then`, находится «метод», и промис вечно ждёт ответа от Android.
 
 export async function secureGet(key: string): Promise<string | null> {
   try {
-    const r = await (await plugin()).get({ key });
+    const r = await KeyVault.get({ key });
     return r.value || null;
   } catch {
     return null; // ключа нет
@@ -33,9 +32,8 @@ export async function secureGet(key: string): Promise<string | null> {
 }
 
 export async function secureSet(key: string, value: string): Promise<void> {
-  const p = await plugin();
-  if (value) await p.set({ key, value });
-  else await p.remove({ key }).catch(() => undefined);
+  if (value) await KeyVault.set({ key, value });
+  else await KeyVault.remove({ key }).catch(() => undefined);
 }
 
 /** Проверяет, что хранилище реально работает: записываем и читаем пробное значение. */
@@ -43,9 +41,8 @@ export async function secureWorks(): Promise<{ ok: boolean; error?: string }> {
   if (!isNative) return { ok: false };
   try {
     secureStage = 'загрузка плагина';
-    const p = await plugin();
     secureStage = 'запись';
-    await p.set({ key: 'probe', value: 'ok' });
+    await KeyVault.set({ key: 'probe', value: 'ok' });
     secureStage = 'чтение';
     const ok = (await secureGet('probe')) === 'ok';
     secureStage = '';
