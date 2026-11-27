@@ -95,7 +95,7 @@ export function BackupScreen({ onClose: onCloseProp }: { onClose: () => void }) 
         window.location.reload();
         return;
       }
-      setDone('Готово: недостающие чаты, персонажи и лорбуки добавлены. Обновите список чатов, перезапустив приложение.');
+      setDone('Готово: недостающие чаты, персонажи и лорбуки добавлены, ключи подставлены. Обновите список чатов, перезапустив приложение.');
       setData(null);
       setSum(null);
     } catch (e) {
@@ -156,7 +156,7 @@ export function BackupScreen({ onClose: onCloseProp }: { onClose: () => void }) 
               <button onClick={() => void run('merge')} disabled={busy} className="btn-accent w-full rounded-2xl py-2.5 text-sm font-medium disabled:opacity-50">
                 Добавить к текущим
               </button>
-              <p className="-mt-1 text-xs text-zinc-500">Добавит то, чего нет на этом устройстве. Существующее и настройки не изменятся.</p>
+              <p className="-mt-1 text-xs text-zinc-500">Добавит то, чего нет на этом устройстве, и API-ключи для провайдеров, где ключ ещё не введён. Остальное не изменится.</p>
               {!confirmReplace ? (
                 <button onClick={() => setConfirmReplace(true)} disabled={busy} className="w-full rounded-2xl bg-zinc-800 py-2.5 text-sm text-zinc-200 disabled:opacity-50">
                   Заменить всё

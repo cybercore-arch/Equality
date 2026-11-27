@@ -252,6 +252,18 @@ export async function applyBackup(raw: BackupData, mode: 'merge' | 'replace'): P
     return;
   }
 
+  // Ключи из копии подставляем только туда, где на этом устройстве ключ ещё не задан
+  const incoming = (d.settings.providers as ProviderConfig[] | undefined) ?? [];
+  if (incoming.some((b) => b.apiKey)) {
+    useSettings.setState({
+      providers: useSettings.getState().providers.map((p) => {
+        const b = incoming.find((x) => x.id === p.id);
+        return b?.apiKey && !p.apiKey ? { ...p, apiKey: b.apiKey, model: p.model || b.model } : p;
+      }),
+    });
+    await new Promise((r) => setTimeout(r, 700));
+  }
+
   await addMissing(db.chats, d.chats);
   await addMissing(db.messages, d.messages);
   await addMissing(db.folders, d.folders);
