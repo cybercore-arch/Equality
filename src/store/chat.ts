@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../db/db';
 import { streamChat } from '../providers';
-import type { Attachment, Chat, Folder, Message, MessageStats, WidgetOp } from '../types';
+import type { Attachment, Chat, ChatMessageInput, Folder, Message, MessageStats, WidgetOp } from '../types';
 import { estimateTokens } from '../lib/tokens';
 import { formatHits, webSearch } from '../lib/websearch';
 import { buildContext, fillNames, messageText } from './prompt';
@@ -184,6 +184,8 @@ export const useChat = create<ChatState>((set, get) => {
     // Дописывание: показываем модели её же незаконченный ответ и просим продолжить
     const existing = opts.continueId ? get().messages[opts.continueId] : undefined;
     let webResults = '';
+    let webTool = false;
+    let tailOverride: ChatMessageInput[] | undefined;
     const build = () => buildContext({
       chat: currentChat() ?? chat,
       messages: get().messages,
@@ -192,12 +194,13 @@ export const useChat = create<ChatState>((set, get) => {
       searchEnabled: settings.searchEnabled,
       instruction: opts.instruction,
       webResults,
-      tail: existing
+      webTool,
+      tail: tailOverride ?? (existing
         ? [
             { role: 'assistant', content: existing.content },
             { role: 'user', content: CONTINUE_PROMPT },
           ]
-        : undefined,
+        : undefined),
     });
     let ctx = build();
 
@@ -236,26 +239,14 @@ export const useChat = create<ChatState>((set, get) => {
       }
     }
 
-    // Поиск в интернете для моделей без своего поиска (у Gemini с включённым поиском Google он свой)
+    // Поиск в интернете: модель сама просит его тегом <search>запрос</search> (у Gemini с поиском Google свой поиск)
+    const searchKey = settings.searchKeys[settings.searchProvider]?.trim();
     if (chat.webSearch && !existing && !(ctx.googleSearch && provider.id === 'gemini')) {
-      const key = settings.searchKeys[settings.searchProvider]?.trim();
-      const lastUser = pathTo(get().messages, parentId)
-        .map((id) => get().messages[id])
-        .reverse()
-        .find((m) => m?.role === 'user');
-      const query = (lastUser?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
-      if (!key) {
+      if (!searchKey) {
         set({ notice: { chatId: chat.id, text: 'Поиск в интернете включён, но ключ поиска не введён: Настройки → Поиск в интернете.' } });
-      } else if (query) {
-        set({ statusNote: 'Ищу в интернете…' });
-        try {
-          const hits = await webSearch(settings.searchProvider, key, query);
-          webResults = formatHits(query, hits);
-          if (webResults) ctx = build();
-        } catch (e) {
-          set({ notice: { chatId: chat.id, text: `Поиск не сработал, отвечаю без него. ${e instanceof Error ? e.message : String(e)}` } });
-        }
-        set({ statusNote: null });
+      } else {
+        webTool = true;
+        ctx = build();
       }
     }
 
@@ -276,37 +267,61 @@ export const useChat = create<ChatState>((set, get) => {
     let attempt = 0;
 
     try {
-      // Если модель перегружена (5xx) и текст ещё не пошёл, тихо повторяем запрос до двух раз
-      for (;;) {
-        try {
-          const stream = streamChat(provider, {
-            messages: ctx.input,
-            system: ctx.system,
-            temperature: ctx.temperature,
-            topP: ctx.topP,
-            maxTokens: ctx.maxTokens,
-            googleSearch: ctx.googleSearch && provider.id === 'gemini',
-            signal,
-            onUsage: (u) => {
-              if (u.completion !== undefined) completionTokens = u.completion;
-              if (u.prompt !== undefined) promptTokens = u.prompt;
-            },
-          });
-          for await (const chunk of stream) {
-            if (tFirst === null) tFirst = performance.now() - t0;
-            acc += chunk;
-            if (!raf) raf = requestAnimationFrame(flush);
+      for (let round = 0; ; round++) {
+        const segStart = acc.length;
+        attempt = 0;
+        // Если модель перегружена (5xx) и текст ещё не пошёл, тихо повторяем запрос до двух раз
+        for (;;) {
+          try {
+            const stream = streamChat(provider, {
+              messages: ctx.input,
+              system: ctx.system,
+              temperature: ctx.temperature,
+              topP: ctx.topP,
+              maxTokens: ctx.maxTokens,
+              googleSearch: ctx.googleSearch && provider.id === 'gemini',
+              signal,
+              onUsage: (u) => {
+                if (u.completion !== undefined) completionTokens = u.completion;
+                if (u.prompt !== undefined) promptTokens = u.prompt;
+              },
+            });
+            for await (const chunk of stream) {
+              if (tFirst === null) tFirst = performance.now() - t0;
+              acc += chunk;
+              if (!raf) raf = requestAnimationFrame(flush);
+            }
+            break;
+          } catch (e) {
+            const status = (e as { status?: number }).status;
+            const retryable = acc.length === segStart && attempt < 2 && status !== undefined && status >= 500 && !signal.aborted;
+            if (!retryable) throw e;
+            attempt++;
+            set({ statusNote: `Модель перегружена, пробую снова (${attempt}/2)…` });
+            await new Promise((r) => setTimeout(r, attempt * 2500));
+            if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
           }
-          break;
-        } catch (e) {
-          const status = (e as { status?: number }).status;
-          const retryable = acc === base && attempt < 2 && status !== undefined && status >= 500 && !signal.aborted;
-          if (!retryable) throw e;
-          attempt++;
-          set({ statusNote: `Модель перегружена, пробую снова (${attempt}/2)…` });
-          await new Promise((r) => setTimeout(r, attempt * 2500));
-          if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
         }
+        // Модель попросила поиск: ищем и продолжаем ответ уже с результатами
+        const m = webTool ? /<search>([\s\S]*?)<\/search>/i.exec(acc.slice(segStart)) : null;
+        if (!m) break;
+        const before = acc.slice(0, segStart + m.index).trimEnd();
+        acc = before;
+        flush();
+        const query = m[1].replace(/\s+/g, ' ').trim().slice(0, 300);
+        if (!query || round >= 2) break;
+        set({ statusNote: `Ищу в интернете: ${query}` });
+        try {
+          const hits = await webSearch(settings.searchProvider, searchKey!, query, signal);
+          webResults = formatHits(query, hits) || `[Поиск по запросу «${query}» ничего не нашёл. Ответь без него и скажи об этом.]`;
+        } catch (e) {
+          if (signal.aborted) throw e;
+          webResults = '[Поиск не удался. Ответь без него и коротко скажи об этом.]';
+          set({ notice: { chatId: chat.id, text: `Поиск не сработал. ${e instanceof Error ? e.message : String(e)}` } });
+        }
+        tailOverride = before ? [{ role: 'assistant', content: before }, { role: 'user', content: CONTINUE_PROMPT }] : undefined;
+        ctx = build();
+        set({ statusNote: null });
       }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {

@@ -39,6 +39,13 @@ function characterPrompt(c: Character): string {
   return parts.filter(Boolean).join('\n');
 }
 
+/** Правила для модели: как попросить поиск в интернете. */
+const SEARCH_RULES =
+  'У тебя есть поиск в интернете. Если для ответа нужны свежие или проверяемые данные (новости, цены, версии, события после твоего обучения, факты, в которых не уверен) или пользователь прямо просит найти, ' +
+  'начни ответ с тега <search>поисковый запрос</search> и больше ничего не пиши: приложение выполнит поиск и даст тебе результаты, после чего ты ответишь. ' +
+  'Запрос формулируй коротко, как для поисковика, на том языке, на котором лучше искать. ' +
+  'Не ищи в обычной беседе, творческих задачах, ролевой игре и когда уверен в ответе. Тег не показывай в обычном тексте.';
+
 /** Грубая обрезка контекста по символам: страховка, если выжимку никто не делал. */
 const MAX_CONTEXT_CHARS = 48_000;
 
@@ -76,6 +83,8 @@ export function buildContext(args: {
   instruction?: string;
   /** Результаты поиска в интернете для этого ответа */
   webResults?: string;
+  /** Модели разрешено просить поиск тегом <search> */
+  webTool?: boolean;
   /** Дополнительные сообщения в конце (например, просьба продолжить) */
   tail?: ChatMessageInput[];
 }): BuiltContext {
@@ -140,7 +149,7 @@ export function buildContext(args: {
     lore: hits.length
       ? `[Справочная информация. Учитывай её, когда это уместно, не пересказывай дословно]\n${hits.map((e) => sub(e.content.trim())).join('\n\n')}`
       : '',
-    web: args.webResults ?? '',
+    web: args.webTool ? (args.webResults ? `${SEARCH_RULES}\n\n${args.webResults}\n\nРезультаты получены, теперь отвечай пользователю. Тег <search> нужен только если результатов явно не хватает.` : SEARCH_RULES) : '',
     widgets: chat.widgets?.length ? widgetPrompt(chat.widgets, foldWidgets(path.map((id) => messages[id]).filter(Boolean))) : '',
     instruction: args.instruction?.trim() ? `[Пожелание пользователя к этому ответу: ${args.instruction.trim()}]` : '',
   };

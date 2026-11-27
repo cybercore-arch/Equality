@@ -57,6 +57,9 @@ export function stripWidgetTags(text: string): string {
   if (!text.includes('<')) return text;
   return text
     .replace(TAG, '')
+    .replace(/<search>[\s\S]*?<\/search>/gi, '')
+    .replace(/<search>[\s\S]*$/i, '')
+    .replace(/<s(e(a(r(c(h)?)?)?)?)?$/i, '')
     .replace(/<(phone|status|roll)\b[^>]*$/i, '')
     .replace(/<(phone|status|roll)\b[^>]*>[^<]*$/i, '')
     .replace(/\n{3,}/g, '\n\n')
