@@ -45,7 +45,7 @@ const MAX_CONTEXT_CHARS = 48_000;
 export interface BuiltContext {
   /** Итоговый системный промпт: слои склеены в порядке «общий → режим → персонаж → персона → чат → выжимка → лорбук → виджеты → пожелание» */
   system: string;
-  layers: { global: string; mode: string; character: string; persona: string; chat: string; summary: string; lore: string; widgets: string; instruction: string };
+  layers: { global: string; mode: string; character: string; persona: string; chat: string; summary: string; lore: string; web: string; widgets: string; instruction: string };
   /** Сообщения, которые уйдут модели (без тех, что уже заменены выжимкой) */
   input: ChatMessageInput[];
   temperature: number;
@@ -74,6 +74,8 @@ export function buildContext(args: {
   searchEnabled: boolean;
   /** Разовое пожелание к ответу, в историю не попадает */
   instruction?: string;
+  /** Результаты поиска в интернете для этого ответа */
+  webResults?: string;
   /** Дополнительные сообщения в конце (например, просьба продолжить) */
   tail?: ChatMessageInput[];
 }): BuiltContext {
@@ -138,6 +140,7 @@ export function buildContext(args: {
     lore: hits.length
       ? `[Справочная информация. Учитывай её, когда это уместно, не пересказывай дословно]\n${hits.map((e) => sub(e.content.trim())).join('\n\n')}`
       : '',
+    web: args.webResults ?? '',
     widgets: chat.widgets?.length ? widgetPrompt(chat.widgets, foldWidgets(path.map((id) => messages[id]).filter(Boolean))) : '',
     instruction: args.instruction?.trim() ? `[Пожелание пользователя к этому ответу: ${args.instruction.trim()}]` : '',
   };

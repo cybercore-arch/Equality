@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CATALOG } from '../providers/catalog';
+import type { SearchProviderId } from '../lib/websearch';
 import type { ProviderConfig, ProviderKind } from '../types';
 import { isNative, secureGet, secureSet, secureStage, secureWorks } from './secure';
 
@@ -36,12 +37,18 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = CATALOG.map((m) => ({
 
 /** Ключи, уже перенесённые в защищённое хранилище: сравниваем с ними, чтобы писать только изменения */
 let savedKeys: Record<string, string> = {};
+let savedSearch: Record<string, string> = {};
 /** true, когда защищённое хранилище проверено и работает: тогда ключи не пишем в localStorage */
 let secureOk = false;
 
 interface SettingsState {
   providers: ProviderConfig[];
   activeProvider: ProviderKind;
+  /** Сервис для поиска в интернете и ключи к нему */
+  searchProvider: SearchProviderId;
+  searchKeys: Record<SearchProviderId, string>;
+  setSearchProvider: (id: SearchProviderId) => void;
+  setSearchKey: (id: SearchProviderId, key: string) => void;
   modeId: string;
   /** Прошёл ли пользователь экран первого запуска */
   onboarded: boolean;
@@ -95,14 +102,27 @@ export const useSettings = create<SettingsState>()(
             }),
           );
           savedKeys = Object.fromEntries(next.map((p) => [p.id, p.apiKey]));
+          const sk = { ...get().searchKeys };
+          for (const id of Object.keys(sk) as SearchProviderId[]) {
+            const stored = await secureGet(`searchkey:${id}`);
+            if (stored) sk[id] = stored;
+            else if (sk[id]) await secureSet(`searchkey:${id}`, sk[id]);
+          }
+          savedSearch = { ...sk };
           secureOk = true;
           writeFlag('ok');
-          set({ providers: next, keysReady: true, secure: { ok: true } }); // заодно перезаписывает localStorage уже без ключей
+          set({ providers: next, searchKeys: sk, keysReady: true, secure: { ok: true } }); // заодно перезаписывает localStorage уже без ключей
           useSettings.subscribe((st) => {
             for (const p of st.providers) {
               if (savedKeys[p.id] !== p.apiKey) {
                 savedKeys[p.id] = p.apiKey;
                 void secureSet(`apikey:${p.id}`, p.apiKey).catch(() => undefined);
+              }
+            }
+            for (const id of Object.keys(st.searchKeys) as SearchProviderId[]) {
+              if (savedSearch[id] !== st.searchKeys[id]) {
+                savedSearch[id] = st.searchKeys[id];
+                void secureSet(`searchkey:${id}`, st.searchKeys[id]).catch(() => undefined);
               }
             }
           });
@@ -119,6 +139,10 @@ export const useSettings = create<SettingsState>()(
       },
       providers: DEFAULT_PROVIDERS,
       activeProvider: 'openrouter',
+      searchProvider: 'tavily',
+      searchKeys: { tavily: '', serper: '' },
+      setSearchProvider: (id) => set({ searchProvider: id }),
+      setSearchKey: (id, key) => set((s) => ({ searchKeys: { ...s.searchKeys, [id]: key } })),
       modeId: 'general',
       onboarded: false,
       setOnboarded: (v) => set({ onboarded: v }),
@@ -144,7 +168,7 @@ export const useSettings = create<SettingsState>()(
         void _k;
         void _i;
         void _s;
-        return secureOk ? { ...rest, providers: st.providers.map((p) => ({ ...p, apiKey: '' })) } : rest;
+        return secureOk ? { ...rest, providers: st.providers.map((p) => ({ ...p, apiKey: '' })), searchKeys: { tavily: '', serper: '' } } : rest;
       },
       // Новые провайдеры из каталога добавляются к уже сохранённым настройкам
       merge: (persisted, current) => {

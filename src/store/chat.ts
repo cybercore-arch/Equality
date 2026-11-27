@@ -3,6 +3,7 @@ import { db } from '../db/db';
 import { streamChat } from '../providers';
 import type { Attachment, Chat, Folder, Message, MessageStats, WidgetOp } from '../types';
 import { estimateTokens } from '../lib/tokens';
+import { formatHits, webSearch } from '../lib/websearch';
 import { buildContext, fillNames, messageText } from './prompt';
 import { useRp } from './rp';
 import { resolveProvider } from './resolve';
@@ -182,6 +183,7 @@ export const useChat = create<ChatState>((set, get) => {
 
     // Дописывание: показываем модели её же незаконченный ответ и просим продолжить
     const existing = opts.continueId ? get().messages[opts.continueId] : undefined;
+    let webResults = '';
     const build = () => buildContext({
       chat: currentChat() ?? chat,
       messages: get().messages,
@@ -189,6 +191,7 @@ export const useChat = create<ChatState>((set, get) => {
       globalPrompt: settings.globalPrompt,
       searchEnabled: settings.searchEnabled,
       instruction: opts.instruction,
+      webResults,
       tail: existing
         ? [
             { role: 'assistant', content: existing.content },
@@ -230,6 +233,29 @@ export const useChat = create<ChatState>((set, get) => {
             text: 'Контекст был почти заполнен, поэтому старая часть переписки автоматически сжата в выжимку. Посмотреть и поправить её: настройки чата → Контекст. Отключить автосжатие: Настройки → Автосжатие контекста.',
           },
         });
+      }
+    }
+
+    // Поиск в интернете для моделей без своего поиска (у Gemini с включённым поиском Google он свой)
+    if (chat.webSearch && !existing && !(ctx.googleSearch && provider.id === 'gemini')) {
+      const key = settings.searchKeys[settings.searchProvider]?.trim();
+      const lastUser = pathTo(get().messages, parentId)
+        .map((id) => get().messages[id])
+        .reverse()
+        .find((m) => m?.role === 'user');
+      const query = (lastUser?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      if (!key) {
+        set({ notice: { chatId: chat.id, text: 'Поиск в интернете включён, но ключ поиска не введён: Настройки → Поиск в интернете.' } });
+      } else if (query) {
+        set({ statusNote: 'Ищу в интернете…' });
+        try {
+          const hits = await webSearch(settings.searchProvider, key, query);
+          webResults = formatHits(query, hits);
+          if (webResults) ctx = build();
+        } catch (e) {
+          set({ notice: { chatId: chat.id, text: `Поиск не сработал, отвечаю без него. ${e instanceof Error ? e.message : String(e)}` } });
+        }
+        set({ statusNote: null });
       }
     }
 

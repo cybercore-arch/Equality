@@ -8,6 +8,7 @@ import { CharactersScreen } from './CharactersScreen';
 import { DataFlowScreen } from './DataFlowScreen';
 import { GlobalPromptSheet } from './GlobalPromptSheet';
 import { Icon } from './Icon';
+import { SearchSettings } from './SearchSettings';
 import { SettingsPanel } from './SettingsPanel';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -34,6 +35,9 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
   const [library, setLibrary] = useState(false);
   const [dataScreen, setDataScreen] = useState(false);
   const [backup, setBackup] = useState(false);
+  const [search, setSearch] = useState(false);
+  const searchProvider = useSettings((s) => s.searchProvider);
+  const searchKey = useSettings((s) => s.searchKeys[s.searchProvider]);
   const autoSummary = useSettings((s) => s.autoSummary);
   const setAutoSummary = useSettings((s) => s.setAutoSummary);
   const rpCount = useRp((s) => s.characters.length);
@@ -79,6 +83,7 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
                 <span className={`absolute top-0.5 h-5 w-5 rounded-full transition-all duration-200 ${autoSummary ? 'left-[1.1rem] bg-zinc-950' : 'left-0.5 bg-zinc-400'}`} />
               </span>
             </button>
+            <Row title="Поиск в интернете" hint={searchKey ? `Сервис: ${searchProvider === 'tavily' ? 'Tavily' : 'Serper'}` : 'Для моделей без своего поиска'} onClick={() => setSearch(true)} />
             <Row title="Резервная копия и перенос" hint="Сохранить всё в файл или восстановить из файла" onClick={() => setBackup(true)} />
             <Row title="Данные и приватность" hint="Что где хранится и куда уходят запросы" onClick={() => setDataScreen(true)} />
             <Row
@@ -93,6 +98,7 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
       </div>
       {providers && <SettingsPanel onClose={() => setProviders(false)} />}
       {prompt && <GlobalPromptSheet onClose={() => setPrompt(false)} />}
+      {search && <SearchSettings onClose={() => setSearch(false)} />}
       {backup && <BackupScreen onClose={() => setBackup(false)} />}
       {dataScreen && <DataFlowScreen onClose={() => setDataScreen(false)} />}
       {library && <CharactersScreen onClose={() => setLibrary(false)} />}

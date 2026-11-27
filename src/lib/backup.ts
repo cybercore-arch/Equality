@@ -114,7 +114,7 @@ async function decrypt(file: EncryptedFile, password: string): Promise<string> {
 
 // ---------- сбор данных ----------
 
-const SETTINGS_FIELDS = ['providers', 'activeProvider', 'modeId', 'onboarded', 'searchEnabled', 'globalPrompt', 'defaultPersonaId', 'autoSummary'] as const;
+const SETTINGS_FIELDS = ['providers', 'activeProvider', 'searchProvider', 'searchKeys', 'modeId', 'onboarded', 'searchEnabled', 'globalPrompt', 'defaultPersonaId', 'autoSummary'] as const;
 const THEME_FIELDS = ['mode', 'accent', 'bubbleAlpha', 'panelAlpha', 'blur', 'radius', 'fontSize', 'bgBlur', 'bgDim'] as const;
 
 async function collect(includeKeys: boolean): Promise<BackupData> {
@@ -133,6 +133,9 @@ async function collect(includeKeys: boolean): Promise<BackupData> {
   const settings: Record<string, unknown> = {};
   for (const f of SETTINGS_FIELDS) settings[f] = st[f];
   settings.providers = (st.providers as ProviderConfig[]).map((p) => ({ ...p, apiKey: includeKeys ? p.apiKey : '' }));
+
+  const sk = (st.searchKeys as Record<string, string> | undefined) ?? {};
+  settings.searchKeys = Object.fromEntries(Object.entries(sk).map(([k, v]) => [k, includeKeys ? v : '']));
 
   const th = useTheme.getState() as unknown as Record<string, unknown>;
   const theme: Record<string, unknown> = {};
@@ -245,7 +248,10 @@ export async function applyBackup(raw: BackupData, mode: 'merge' | 'replace'): P
     });
     const patch: Record<string, unknown> = {};
     for (const f of SETTINGS_FIELDS) if (f in d.settings) patch[f] = d.settings[f];
-    useSettings.setState({ ...patch, providers } as never);
+    const curSk = useSettings.getState().searchKeys;
+    const inSk = (d.settings.searchKeys as Record<string, string> | undefined) ?? {};
+    const searchKeys = Object.fromEntries(Object.keys(curSk).map((k) => [k, inSk[k] || curSk[k as keyof typeof curSk]]));
+    useSettings.setState({ ...patch, providers, searchKeys } as never);
     useTheme.setState({ ...d.theme, bgVersion: useTheme.getState().bgVersion + 1 } as never);
     // Даём подпискам время записать ключи в защищённое хранилище
     await new Promise((r) => setTimeout(r, 700));
@@ -261,6 +267,13 @@ export async function applyBackup(raw: BackupData, mode: 'merge' | 'replace'): P
         return b?.apiKey && !p.apiKey ? { ...p, apiKey: b.apiKey, model: p.model || b.model } : p;
       }),
     });
+    await new Promise((r) => setTimeout(r, 700));
+  }
+
+  const inSk2 = (d.settings.searchKeys as Record<string, string> | undefined) ?? {};
+  const curSk2 = useSettings.getState().searchKeys;
+  if (Object.values(inSk2).some(Boolean)) {
+    useSettings.setState({ searchKeys: Object.fromEntries(Object.keys(curSk2).map((k) => [k, curSk2[k as keyof typeof curSk2] || inSk2[k] || ''])) as typeof curSk2 });
     await new Promise((r) => setTimeout(r, 700));
   }
 

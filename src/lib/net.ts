@@ -61,6 +61,7 @@ const hostOf = (u: string) => {
 /** Разрешённые адреса: все провайдеры из каталога и свой сервер из настроек. */
 export function allowedHosts(): Set<string> {
   const hosts = new Set(CATALOG.map((m) => hostOf(m.base)).filter(Boolean));
+  for (const h of ['api.tavily.com', 'google.serper.dev']) hosts.add(h);
   for (const p of useSettings.getState().providers) {
     if (p.baseUrl) {
       const h = hostOf(p.baseUrl);

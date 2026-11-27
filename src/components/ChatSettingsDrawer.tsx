@@ -280,6 +280,15 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
                 </div>
               </div>
             </div>
+            <div className="flex items-start gap-3">
+              <Switch checked={!!chat.webSearch} onChange={(v) => void updateChat(chat.id, { webSearch: v })} label="Поиск в интернете" />
+              <div className="min-w-0 text-sm">
+                <div className="text-zinc-300">Поиск в интернете</div>
+                <div className="text-xs text-zinc-500">
+                  Для любой модели: перед ответом приложение ищет по твоему последнему сообщению через сторонний сервис (ключ: Настройки → Поиск в интернете). Текст сообщения уходит этому сервису.
+                </div>
+              </div>
+            </div>
           </Collapsible>
 
           <Collapsible title="Экспорт чата" hint="Текущая ветка в файл">
