@@ -5,7 +5,7 @@ import type { ProviderConfig, ProviderKind } from '../types';
 import { isNative, secureGet, secureSet, secureStage, secureWorks } from './secure';
 
 /** Запоминаем, что хранилище на этом телефоне не работает, чтобы не ждать его при каждом запуске */
-const FLAG = 'secure-state';
+const FLAG = 'secure-state-2';
 const readFlag = () => {
   try {
     return localStorage.getItem(FLAG);

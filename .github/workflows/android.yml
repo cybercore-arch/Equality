@@ -29,6 +29,34 @@ jobs:
       - name: Создание Android-проекта
         run: npx cap add android
 
+      # Своё хранилище ключей на Android Keystore и запрет облачных бэкапов (ключи не должны уходить с телефона)
+      - name: Защита данных на Android
+        run: |
+          d=android/app/src/main/java/app/equality/chat
+          cp native/KeyVaultPlugin.java $d/KeyVaultPlugin.java
+          cat > $d/MainActivity.java <<'JAVA'
+          package app.equality.chat;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  registerPlugin(KeyVaultPlugin.class);
+                  super.onCreate(savedInstanceState);
+              }
+          }
+          JAVA
+          python3 - <<'PY'
+          import pathlib
+          p = pathlib.Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          assert 'android:allowBackup="true"' in s, 'не нашёл allowBackup в манифесте'
+          p.write_text(s.replace('android:allowBackup="true"', 'android:allowBackup="false"'))
+          PY
+          grep -n allowBackup android/app/src/main/AndroidManifest.xml
+
       - name: Иконки приложения
         run: npx @capacitor/assets generate --android --assetPath resources
 

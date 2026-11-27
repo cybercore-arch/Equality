@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 
 /**
  * Защищённое хранилище ключей. В Android-приложении ключи лежат в Android Keystore (шифруются
@@ -10,8 +10,17 @@ export const isNative = Capacitor.isNativePlatform();
 /** На каком шаге остановилась проверка (нужно, чтобы понять, где хранилище зависает) */
 export let secureStage = '';
 
+interface KeyVaultPlugin {
+  get(o: { key: string }): Promise<{ value?: string }>;
+  set(o: { key: string; value: string }): Promise<void>;
+  remove(o: { key: string }): Promise<void>;
+}
+
+// Своё хранилище на Android Keystore (исходники: native/KeyVaultPlugin.java)
+const KeyVault = registerPlugin<KeyVaultPlugin>('KeyVault');
+
 async function plugin() {
-  return (await import('capacitor-secure-storage-plugin')).SecureStoragePlugin;
+  return KeyVault;
 }
 
 export async function secureGet(key: string): Promise<string | null> {

@@ -40,7 +40,12 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
 const Markdown = memo(function Markdown({ text }: { text: string }) {
   return (
     <div className="md min-w-0 max-w-full break-words">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: CodeBlock, pre: ({ children }) => <>{children}</> }}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+          code: CodeBlock,
+          pre: ({ children }) => <>{children}</>,
+          // Картинки по ссылкам из ответов не грузим: так можно отследить читателя
+          img: ({ alt }) => <span className="opacity-60">[изображение скрыто{alt ? `: ${alt}` : ''}]</span>,
+        }}>
         {text}
       </ReactMarkdown>
     </div>

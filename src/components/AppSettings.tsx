@@ -4,6 +4,7 @@ import { PROVIDER_LABEL } from '../guides';
 import { useRp } from '../store/rp';
 import { useSettings } from '../store/settings';
 import { CharactersScreen } from './CharactersScreen';
+import { DataFlowScreen } from './DataFlowScreen';
 import { GlobalPromptSheet } from './GlobalPromptSheet';
 import { Icon } from './Icon';
 import { SettingsPanel } from './SettingsPanel';
@@ -30,6 +31,7 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
   const [providers, setProviders] = useState(false);
   const [prompt, setPrompt] = useState(false);
   const [library, setLibrary] = useState(false);
+  const [dataScreen, setDataScreen] = useState(false);
   const autoSummary = useSettings((s) => s.autoSummary);
   const setAutoSummary = useSettings((s) => s.setAutoSummary);
   const rpCount = useRp((s) => s.characters.length);
@@ -75,6 +77,7 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
                 <span className={`absolute top-0.5 h-5 w-5 rounded-full transition-all duration-200 ${autoSummary ? 'left-[1.1rem] bg-zinc-950' : 'left-0.5 bg-zinc-400'}`} />
               </span>
             </button>
+            <Row title="Данные и приватность" hint="Что где хранится и куда уходят запросы" onClick={() => setDataScreen(true)} />
             <Row
               title="Подключение к ИИ"
               hint={active ? `По умолчанию: ${PROVIDER_LABEL[active.id]} · ${active.model || 'модель не выбрана'}` : ''}
@@ -87,6 +90,7 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
       </div>
       {providers && <SettingsPanel onClose={() => setProviders(false)} />}
       {prompt && <GlobalPromptSheet onClose={() => setPrompt(false)} />}
+      {dataScreen && <DataFlowScreen onClose={() => setDataScreen(false)} />}
       {library && <CharactersScreen onClose={() => setLibrary(false)} />}
     </div>
   );
