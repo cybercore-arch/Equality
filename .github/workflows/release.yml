@@ -1,0 +1,161 @@
+name: Release
+
+# Подписанный релиз: собирает APK, выкладывает его в публичный репозиторий и обновляет там исходники.
+# Нужны секреты: RELEASE_KEYSTORE_B64, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD, PUBLIC_REPO_TOKEN
+# и переменная репозитория PUBLIC_REPO (например, name/equality).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Номер версии, например 0.3.0'
+        required: true
+      notes:
+        description: 'Что нового (коротко)'
+        required: false
+        default: ''
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Проверка настроек
+        env:
+          KS: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          PUB: ${{ vars.PUBLIC_REPO }}
+        run: |
+          [ -n "$KS" ] || { echo "::error::Нет секрета RELEASE_KEYSTORE_B64"; exit 1; }
+          [ -n "$TOKEN" ] || { echo "::error::Нет секрета PUBLIC_REPO_TOKEN"; exit 1; }
+          [ -n "$PUB" ] || { echo "::error::Нет переменной PUBLIC_REPO"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Установка зависимостей
+        run: npm install
+
+      - name: Сборка веб-части
+        run: npm run build
+
+      - name: Создание Android-проекта
+        run: npx cap add android
+
+      # Своё хранилище ключей на Android Keystore и запрет облачных бэкапов (ключи не должны уходить с телефона)
+      - name: Защита данных на Android
+        run: |
+          d=android/app/src/main/java/app/equality/chat
+          cp native/KeyVaultPlugin.java $d/KeyVaultPlugin.java
+          cat > $d/MainActivity.java <<'JAVA'
+          package app.equality.chat;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  registerPlugin(KeyVaultPlugin.class);
+                  super.onCreate(savedInstanceState);
+              }
+          }
+          JAVA
+          python3 - <<'PY'
+          import pathlib
+          p = pathlib.Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          assert 'android:allowBackup="true"' in s, 'не нашёл allowBackup в манифесте'
+          p.write_text(s.replace('android:allowBackup="true"', 'android:allowBackup="false"'))
+          PY
+          grep -n allowBackup android/app/src/main/AndroidManifest.xml
+
+      - name: Иконки приложения
+        run: npx @capacitor/assets generate --android --assetPath resources
+
+      - name: Синхронизация
+        run: npx cap sync android
+
+      - name: Ключ релизной подписи
+        env:
+          KS: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+        run: |
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "KS_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Подпись и версия в Gradle
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+          p = pathlib.Path('android/app/build.gradle')
+          s = p.read_text()
+          block = """android {
+              signingConfigs {
+                  release {
+                      storeFile file(System.getenv('KS_PATH'))
+                      storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
+                      keyAlias System.getenv('RELEASE_KEY_ALIAS')
+                      keyPassword System.getenv('RELEASE_KEY_PASSWORD')
+                  }
+              }
+          """
+          s, n = re.subn(r'^android \{\n', block, s, count=1, flags=re.M)
+          assert n == 1, 'не нашёл блок android'
+          s, n = re.subn(r'(buildTypes \{\s*release \{\n)', r'\1            signingConfig signingConfigs.release\n', s, count=1)
+          assert n == 1, 'не нашёл buildTypes.release'
+          s = re.sub(r'versionCode \d+', 'versionCode ' + os.environ['GITHUB_RUN_NUMBER'], s, count=1)
+          s = re.sub(r'versionName "[^"]*"', 'versionName "' + os.environ['VERSION'] + '"', s, count=1)
+          p.write_text(s)
+          PY
+
+      - name: Сборка подписанного APK
+        working-directory: android
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Проверка подписи и имя файла
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          SRC=android/app/build/outputs/apk/release/app-release.apk
+          "$APKSIGNER" verify --print-certs "$SRC" | tee cert.txt
+          cp "$SRC" "Equality-$VERSION.apk"
+          echo "CERT=$(grep -i 'certificate SHA-256' cert.txt | head -1 | sed 's/.*: //')" >> "$GITHUB_ENV"
+          echo "APK_SHA=$(sha256sum "Equality-$VERSION.apk" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Публикация в публичный репозиторий
+        env:
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          PUB: ${{ vars.PUBLIC_REPO }}
+        run: |
+          set -e
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${PUB}.git" pub
+          # Исходники этой версии одним коммитом, без истории разработки и служебных файлов
+          rsync -a --delete \
+            --exclude '.git' --exclude 'node_modules' --exclude 'dist' --exclude 'android' \
+            --exclude 'ROADMAP.md' --exclude 'signing' --exclude '.github' \
+            --exclude "Equality-*.apk" --exclude 'cert.txt' --exclude 'pub' \
+            ./ pub/
+          cd pub
+          git config user.name "Equality release"
+          git config user.email "noreply@users.noreply.github.com"
+          git add -A
+          git commit -m "Equality $VERSION" || echo "Исходники не изменились"
+          git push
+          cd ..
+          printf '%s\n\n%s\n\n%s\n' "${NOTES:-Новая версия.}" "Отпечаток сертификата подписи SHA-256: \`${CERT}\`" "SHA-256 файла: \`${APK_SHA}\`" > notes.md
+          gh release create "v$VERSION" "Equality-$VERSION.apk" --repo "$PUB" --title "Equality $VERSION" --notes-file notes.md
