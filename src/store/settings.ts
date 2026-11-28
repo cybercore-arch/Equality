@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CATALOG } from '../providers/catalog';
 import type { SearchProviderId } from '../lib/websearch';
-import type { ProviderConfig, ProviderKind } from '../types';
+import type { Mode, ProviderConfig, ProviderKind } from '../types';
 import { isNative, secureGet, secureSet, secureStage, secureWorks } from './secure';
 
 /** Запоминаем, что хранилище на этом телефоне не работает, чтобы не ждать его при каждом запуске */
@@ -50,6 +50,10 @@ interface SettingsState {
   setSearchProvider: (id: SearchProviderId) => void;
   setSearchKey: (id: SearchProviderId, key: string) => void;
   modeId: string;
+  /** Свои режимы */
+  customModes: Mode[];
+  saveMode: (m: Mode) => void;
+  deleteMode: (id: string) => void;
   /** Прошёл ли пользователь экран первого запуска */
   onboarded: boolean;
   setOnboarded: (v: boolean) => void;
@@ -144,6 +148,9 @@ export const useSettings = create<SettingsState>()(
       setSearchProvider: (id) => set({ searchProvider: id }),
       setSearchKey: (id, key) => set((s) => ({ searchKeys: { ...s.searchKeys, [id]: key } })),
       modeId: 'general',
+      customModes: [],
+      saveMode: (m) => set((s) => ({ customModes: s.customModes.some((x) => x.id === m.id) ? s.customModes.map((x) => (x.id === m.id ? m : x)) : [...s.customModes, m] })),
+      deleteMode: (id) => set((s) => ({ customModes: s.customModes.filter((x) => x.id !== id), modeId: s.modeId === id ? 'general' : s.modeId })),
       onboarded: false,
       setOnboarded: (v) => set({ onboarded: v }),
       searchEnabled: false,

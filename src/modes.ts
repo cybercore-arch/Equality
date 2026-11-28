@@ -1,4 +1,5 @@
 import type { Mode } from './types';
+import { useSettings } from './store/settings';
 
 export const MODES: Mode[] = [
   {
@@ -38,4 +39,6 @@ export const MODES: Mode[] = [
   },
 ];
 
-export const getMode = (id: string): Mode => MODES.find((m) => m.id === id) ?? MODES[0];
+/** Встроенные и свои режимы вместе. */
+export const allModes = (custom: Mode[]): Mode[] => [...MODES, ...custom];
+export const getMode = (id: string): Mode => allModes(useSettings.getState().customModes).find((m) => m.id === id) ?? MODES[0];

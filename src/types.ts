@@ -133,6 +133,8 @@ export interface ProviderConfig {
 
 export interface Mode {
   id: string;
+  /** Свой режим, созданный пользователем */
+  custom?: boolean;
   name: string;
   /** Короткое пояснение для карточки выбора режима */
   description: string;
