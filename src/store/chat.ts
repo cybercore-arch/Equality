@@ -11,6 +11,23 @@ import { useSettings } from './settings';
 
 export const ROOT = '__root__';
 const NEW_TITLE = 'Новый чат';
+/**
+ * Ищет в тексте ответа просьбу о поиске. Основной формат <search>запрос</search>,
+ * но модели, обученные на своих «вызовах инструментов», часто пишут по-своему (<invoke name="web_search">, JSON): понимаем и их.
+ */
+function findSearchRequest(text: string): { index: number; query: string } | null {
+  const own = /<search>([\s\S]*?)<\/search>/i.exec(text);
+  if (own) return { index: own.index, query: own[1] };
+  const inv = /<invoke\b[^>]*name\s*=\s*["'](?:web_search|search|google_search|browser\.search)["'][^>]*>[\s\S]*?<parameter\b[^>]*name\s*=\s*["'](?:query|q|search_query)["'][^>]*>([\s\S]*?)<\/parameter>/i.exec(text);
+  if (inv) {
+    const starts = ['<tool_call', 'tool_call>', '<function_call', '<invoke'].map((m) => text.lastIndexOf(m, inv.index + 7)).filter((i) => i >= 0);
+    return { index: Math.min(inv.index, ...starts), query: inv[1] };
+  }
+  const json = /"name"\s*:\s*"(?:web_search|search)"[\s\S]{0,80}?"(?:query|q)"\s*:\s*"([^"]+)"/i.exec(text);
+  if (json) return { index: Math.max(0, text.lastIndexOf('{', json.index)), query: json[1] };
+  return null;
+}
+
 const CONTINUE_PROMPT = 'Продолжи свой предыдущий ответ ровно с того места, где он оборвался. Не повторяй уже написанное.';
 
 const SUMMARY_SYSTEM =
@@ -248,6 +265,23 @@ export const useChat = create<ChatState>((set, get) => {
         set({ notice: { chatId: chat.id, text: 'Поиск в интернете включён, но ключ поиска не введён: Настройки → Поиск в интернете.' } });
       } else {
         webTool = true;
+        // Режим «искать всегда» для моделей, которые сами тег не пишут: ищем по последнему сообщению до ответа
+        if (chat.webSearchAlways) {
+          const lastUser = pathTo(get().messages, parentId)
+            .map((id) => get().messages[id])
+            .reverse()
+            .find((m) => m?.role === 'user');
+          const q = (lastUser?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+          if (q) {
+            set({ statusNote: `Ищу в интернете: ${q}` });
+            try {
+              webResults = formatHits(q, await webSearch(settings.searchProvider, searchKey, q)) || '';
+            } catch (e) {
+              set({ notice: { chatId: chat.id, text: `Поиск не сработал, отвечаю без него. ${e instanceof Error ? e.message : String(e)}` } });
+            }
+            set({ statusNote: null });
+          }
+        }
         ctx = build();
       }
     }
@@ -305,12 +339,12 @@ export const useChat = create<ChatState>((set, get) => {
           }
         }
         // Модель попросила поиск: ищем и продолжаем ответ уже с результатами
-        const m = webTool ? /<search>([\s\S]*?)<\/search>/i.exec(acc.slice(segStart)) : null;
+        const m = webTool ? findSearchRequest(acc.slice(segStart)) : null;
         if (!m) break;
         const before = acc.slice(0, segStart + m.index).trimEnd();
         acc = before;
         flush();
-        const query = m[1].replace(/\s+/g, ' ').trim().slice(0, 300);
+        const query = m.query.replace(/\s+/g, ' ').trim().slice(0, 300);
         if (!query || round >= 2) break;
         set({ statusNote: `Ищу в интернете: ${query}` });
         try {

@@ -321,6 +321,15 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
                 </div>
               </div>
             </div>
+            {chat.webSearch && (
+              <div className="flex items-start gap-3">
+                <Switch checked={!!chat.webSearchAlways} onChange={(v) => void updateChat(chat.id, { webSearchAlways: v })} label="Искать всегда" />
+                <div className="min-w-0 text-sm">
+                  <div className="text-zinc-300">Искать по каждому сообщению</div>
+                  <div className="text-xs text-zinc-500">Для моделей, которые не умеют просить поиск сами. Сервису уходит текст твоего последнего сообщения, тратит больше запросов.</div>
+                </div>
+              </div>
+            )}
           </Collapsible>
 
           <Collapsible title="Экспорт чата" hint="Текущая ветка в файл">
