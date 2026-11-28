@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useChat } from '../store/chat';
 import { useRp } from '../store/rp';
 import { Avatar } from './Avatar';
+import { Icon } from './Icon';
 import { CharactersScreen } from './CharactersScreen';
 import { Wizard } from './Wizard';
 import { MessageItem } from './MessageItem';
@@ -74,6 +75,7 @@ export function ChatView() {
   const chatId = useChat((s) => s.chatId);
   const parentRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true); // "прилипли" к низу — автоскролл при стриминге
+  const [away, setAway] = useState(false); // ушли далеко вверх: показываем кнопку «вниз»
 
   const virtualizer = useVirtualizer({
     count: path.length,
@@ -99,10 +101,26 @@ export function ChatView() {
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
-    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stick.current = dist < 80;
+    const far = dist > el.clientHeight * 1.5;
+    setAway((a) => (a === far ? a : far));
+  };
+
+  const toBottom = () => {
+    const el = parentRef.current;
+    if (!el || !path.length) return;
+    stick.current = true;
+    virtualizer.scrollToIndex(path.length - 1, { align: 'end' });
+    // Высоты ещё не измерены: после прыжка дотягиваем до самого низа
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
+    });
   };
 
   return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
     <div ref={parentRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
       {path.length === 0 && <EmptyState />}
       <div style={{ height: total, position: 'relative', width: '100%' }}>
@@ -117,6 +135,16 @@ export function ChatView() {
           </div>
         ))}
       </div>
+    </div>
+    {away && (
+      <button
+        onClick={toBottom}
+        aria-label="В самый низ"
+        className="glass anim-fade absolute bottom-3 right-4 flex h-10 w-10 items-center justify-center rounded-full border border-fg/10 text-zinc-200 shadow-lg"
+      >
+        <Icon name="down" size={20} />
+      </button>
+    )}
     </div>
   );
 }

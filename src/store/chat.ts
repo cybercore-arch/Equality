@@ -361,7 +361,9 @@ export const useChat = create<ChatState>((set, get) => {
       }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
-        set({ error: (e as Error).message || 'Неизвестная ошибка' });
+        const msg = (e as Error).message || 'Неизвестная ошибка';
+        const tooLong = /reduce the length|too long|context length|maximum context|too many tokens|request too large/i.test(msg);
+        set({ error: tooLong ? `${msg}\nЗапрос слишком большой для этой модели или лимита провайдера. Сожми контекст (настройки чата → Контекст), укажи там размер контекста модели или выбери модель с большим контекстом.` : msg });
       }
     } finally {
       if (raf) cancelAnimationFrame(raf);
@@ -708,37 +710,56 @@ export const useChat = create<ChatState>((set, get) => {
         .slice(startIdx, cutoff + 1)
         .map((id) => messages[id])
         .filter((m) => m && m.role !== 'system' && (m.content || m.attachments?.length));
-      let transcript = chunk.map((m) => `${m.role === 'user' ? 'Пользователь' : 'Ассистент'}: ${messageText(m)}`).join('\n\n');
-      if (transcript.length > 80_000) transcript = transcript.slice(-80_000);
-      const prev = prevIdx >= 0 ? (chat.summary ?? '').trim() : '';
-      const prompt = (prev ? `Предыдущая выжимка:\n${prev}\n\nНовые сообщения:\n` : 'Сообщения:\n') + transcript;
+      // Режем историю на части, которые влезают в один запрос: размер от контекста модели (иначе провайдер ответит «слишком длинно»)
+      const partLimit = Math.min(40_000, Math.max(6_000, chat.contextLimit ? Math.round(chat.contextLimit * 3.2 * 0.35) : 12_000));
+      const lines = chunk.map((m) => `${m.role === 'user' ? 'Пользователь' : 'Ассистент'}: ${messageText(m).slice(0, partLimit)}`);
+      let parts: string[] = [];
+      let curPart = '';
+      for (const ln of lines) {
+        if (curPart && curPart.length + ln.length > partLimit) {
+          parts.push(curPart);
+          curPart = '';
+        }
+        curPart += (curPart ? '\n\n' : '') + ln;
+      }
+      if (curPart) parts.push(curPart);
+      // Очень длинную историю сжимаем только по последним частям: иначе это десятки запросов
+      if (parts.length > 12) parts = parts.slice(-12);
+      let running = prevIdx >= 0 ? (chat.summary ?? '').trim() : '';
 
       set({ summarizing: true, error: null });
       abortCtl = new AbortController();
-      let acc = '';
       let aborted = false;
       let failed = '';
       try {
-        const stream = streamChat(provider, {
-          messages: [{ role: 'user', content: prompt }],
-          system: SUMMARY_SYSTEM,
-          temperature: 0.3,
-          topP: 0.9,
-          googleSearch: false,
-          signal: abortCtl.signal,
-        });
-        for await (const part of stream) acc += part;
+        for (let i = 0; i < parts.length; i++) {
+          if (parts.length > 1) set({ statusNote: `Сжимаю переписку: часть ${i + 1} из ${parts.length}…` });
+          const prompt = (running ? `Предыдущая выжимка:\n${running}\n\nНовые сообщения:\n` : 'Сообщения:\n') + parts[i];
+          let acc = '';
+          const stream = streamChat(provider, {
+            messages: [{ role: 'user', content: prompt }],
+            system: SUMMARY_SYSTEM,
+            temperature: 0.3,
+            topP: 0.9,
+            googleSearch: false,
+            signal: abortCtl.signal,
+          });
+          for await (const part of stream) acc += part;
+          if (!acc.trim()) throw new Error('Модель вернула пустую выжимку');
+          running = acc.trim();
+        }
       } catch (e) {
         if ((e as Error).name === 'AbortError') aborted = true;
         else failed = (e as Error).message || 'Не удалось сжать контекст';
       } finally {
         abortCtl = null;
-        set({ summarizing: false });
+        set({ summarizing: false, statusNote: null });
       }
+      const acc = running;
 
       if (aborted) return 'abort';
       if (failed) {
-        if (auto) set({ notice: { chatId: chat.id, text: 'Контекст почти заполнен, но сжать его автоматически не получилось. Ответ всё равно будет сгенерирован. Можно сжать вручную: настройки чата → Контекст.' } });
+        if (auto) set({ notice: { chatId: chat.id, text: `Контекст почти заполнен, но сжать его автоматически не получилось (${failed}). Ответ всё равно будет сгенерирован. Можно сжать вручную: настройки чата → Контекст.` } });
         else set({ error: failed });
         return 'skip';
       }
