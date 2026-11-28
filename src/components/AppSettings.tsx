@@ -3,6 +3,7 @@ import { useOverlay } from '../lib/overlay';
 import { PROVIDER_LABEL } from '../guides';
 import { useRp } from '../store/rp';
 import { useSettings } from '../store/settings';
+import { createStressChat } from '../lib/stress';
 import { BackupScreen } from './BackupScreen';
 import { CharactersScreen } from './CharactersScreen';
 import { DataFlowScreen } from './DataFlowScreen';
@@ -84,6 +85,13 @@ export function AppSettings({ onClose: onCloseProp, onAppearance }: { onClose: (
               </span>
             </button>
             <Row title="Поиск в интернете" hint={searchKey ? `Сервис: ${searchProvider === 'tavily' ? 'Tavily' : 'Serper'}` : 'Для моделей без своего поиска'} onClick={() => setSearch(true)} />
+            <Row
+              title="Тест скорости"
+              hint="Создаст чат на 5000 сообщений, чтобы проверить прокрутку. Потом удали его"
+              onClick={() => {
+                if (confirm('Создать тестовый чат на 5000 сообщений? Это займёт несколько секунд. Потом его можно удалить как обычный чат.')) void createStressChat(5000);
+              }}
+            />
             <Row title="Резервная копия и перенос" hint="Сохранить всё в файл или восстановить из файла" onClick={() => setBackup(true)} />
             <Row title="Данные и приватность" hint="Что где хранится и куда уходят запросы" onClick={() => setDataScreen(true)} />
             <Row
