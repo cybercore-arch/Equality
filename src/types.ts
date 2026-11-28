@@ -61,6 +61,8 @@ export interface Chat {
   /** Провайдер и модель только для этого чата. Если не заданы, берутся настройки по умолчанию */
   providerId?: ProviderKind;
   model?: string;
+  /** Закреплён наверху списка чатов */
+  pinned?: boolean;
   /** Папка в левом меню */
   folderId?: string | null;
 

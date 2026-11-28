@@ -1,4 +1,6 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { fileExt, highlight } from '../lib/highlight';
+import { saveFile } from '../lib/saveFile';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { dataUrl } from '../lib/attachments';
@@ -12,12 +14,20 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
   const text = String(children ?? '').replace(/\n$/, '');
   const lang = /language-(\w+)/.exec(className ?? '')?.[1];
   const isBlock = !!lang || text.includes('\n');
+  const html = useMemo(() => (isBlock ? highlight(text, lang) : null), [isBlock, text, lang]);
   if (!isBlock) return <code>{children}</code>;
 
   return (
     <div className="my-2 max-w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
       <div className="flex items-center justify-between bg-zinc-800/70 px-3 py-1 text-xs text-zinc-400">
         <span>{lang ?? 'code'}</span>
+        <span className="flex items-center gap-1">
+        <button
+          className="rounded px-2 py-0.5 hover:bg-zinc-700"
+          onClick={() => void saveFile(`code.${fileExt(lang)}`, new Blob([text], { type: 'text/plain' }))}
+        >
+          Сохранить
+        </button>
         <button
           className="rounded px-2 py-0.5 hover:bg-zinc-700"
           onClick={async () => {
@@ -28,10 +38,11 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
         >
           {copied ? 'Скопировано' : 'Копировать'}
         </button>
+        </span>
       </div>
       {/* Прокручивается только это окошко, а не всё сообщение */}
       <pre className="max-w-full overflow-x-auto p-3 text-sm">
-        <code>{text}</code>
+        {html ? <code className="hljs" dangerouslySetInnerHTML={{ __html: html }} /> : <code>{text}</code>}
       </pre>
     </div>
   );

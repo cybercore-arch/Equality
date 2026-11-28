@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { db } from '../db/db';
 import { useBackEntry } from '../lib/overlay';
 import { useChat } from '../store/chat';
 import type { Chat, Folder } from '../types';
@@ -38,8 +39,39 @@ export function Sidebar({
   const [draft, setDraft] = useState('');
   const [addingFolder, setAddingFolder] = useState(false);
 
+  // Поиск: по названиям сразу, по тексту сообщений с небольшой задержкой
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<{ chatId: string; snippet: string }[]>([]);
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) {
+      setFound([]);
+      return;
+    }
+    let stale = false;
+    const t = setTimeout(async () => {
+      const msgs = await db.messages.filter((m) => m.content.toLowerCase().includes(q)).limit(40).toArray();
+      if (stale) return;
+      const seen = new Set<string>();
+      const out: { chatId: string; snippet: string }[] = [];
+      for (const m of msgs) {
+        if (seen.has(m.chatId)) continue;
+        seen.add(m.chatId);
+        const i = m.content.toLowerCase().indexOf(q);
+        const from = Math.max(0, i - 40);
+        out.push({ chatId: m.chatId, snippet: (from > 0 ? '…' : '') + m.content.slice(from, i + q.length + 60).replace(/\s+/g, ' ') });
+      }
+      setFound(out);
+    }, 300);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
+  }, [query]);
+
   const folderIds = new Set(folders.map((f) => f.id));
-  const loose = chats.filter((c) => !c.folderId || !folderIds.has(c.folderId));
+  const pinned = chats.filter((c) => c.pinned);
+  const loose = chats.filter((c) => !c.pinned && (!c.folderId || !folderIds.has(c.folderId)));
 
   const startRename = (key: string, current: string) => {
     setDraft(current);
@@ -72,7 +104,7 @@ export function Sidebar({
     />
   );
 
-  const ActionBtn = ({ icon, label, onClick, danger }: { icon: 'edit' | 'folder' | 'trash'; label: string; onClick: () => void; danger?: boolean }) => (
+  const ActionBtn = ({ icon, label, onClick, danger }: { icon: 'edit' | 'folder' | 'trash' | 'pin'; label: string; onClick: () => void; danger?: boolean }) => (
     <button
       onClick={onClick}
       className={`flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1.5 text-xs transition-colors hover:bg-zinc-700 ${
@@ -102,6 +134,7 @@ export function Sidebar({
                 onClose();
               }}
             >
+              {c.pinned && <Icon name="pin" size={12} className="mr-1.5 inline text-zinc-500" />}
               {c.title}
             </button>
           )}
@@ -120,6 +153,7 @@ export function Sidebar({
         {menuFor === key && (
           <div className="anim-fade flex flex-wrap gap-1.5 px-2 py-2">
             <ActionBtn icon="edit" label="Переименовать" onClick={() => startRename(key, c.title)} />
+            <ActionBtn icon="pin" label={c.pinned ? 'Открепить' : 'Закрепить'} onClick={() => { void updateChat(c.id, { pinned: !c.pinned }); setMenuFor(null); }} />
             <ActionBtn icon="folder" label="В папку" onClick={() => setMoving(moving === c.id ? null : c.id)} />
             <ActionBtn
               icon="trash"
@@ -158,7 +192,7 @@ export function Sidebar({
 
   const folderBlock = (f: Folder) => {
     const key = `folder:${f.id}`;
-    const inside = chats.filter((c) => c.folderId === f.id);
+    const inside = chats.filter((c) => !c.pinned && c.folderId === f.id);
     return (
       <div key={f.id} className="mb-1">
         <div className="flex items-center rounded-xl hover:bg-fg/5">
@@ -197,6 +231,35 @@ export function Sidebar({
         )}
         {!f.collapsed && inside.map((c) => chatRow(c, true))}
       </div>
+    );
+  };
+
+  const SearchResults = () => {
+    const q = query.trim().toLowerCase();
+    const byTitle = chats.filter((c) => c.title.toLowerCase().includes(q));
+    const titleIds = new Set(byTitle.map((c) => c.id));
+    const byText = found.filter((f) => !titleIds.has(f.chatId) && chats.some((c) => c.id === f.chatId));
+    if (!byTitle.length && !byText.length) return <div className="px-3 py-6 text-center text-xs text-zinc-500">Ничего не найдено</div>;
+    return (
+      <>
+        {byTitle.map((c) => chatRow(c, false))}
+        {byText.map((f) => {
+          const c = chats.find((x) => x.id === f.chatId)!;
+          return (
+            <button
+              key={f.chatId}
+              onClick={() => {
+                void selectChat(c.id);
+                onClose();
+              }}
+              className="block w-full rounded-xl px-3 py-2 text-left hover:bg-fg/5"
+            >
+              <div className="truncate text-sm">{c.title}</div>
+              <div className="line-clamp-2 text-xs text-zinc-500">{f.snippet}</div>
+            </button>
+          );
+        })}
+      </>
     );
   };
 
@@ -257,9 +320,37 @@ export function Sidebar({
           </div>
         )}
 
+        <div className="relative mx-3 mb-2">
+          <Icon name="search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по чатам"
+            className="w-full rounded-xl bg-zinc-800 py-2 pl-9 pr-8 text-sm outline-none placeholder:text-zinc-500"
+          />
+          {query && (
+            <button onClick={() => setQuery('')} aria-label="Очистить поиск" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500">
+              <Icon name="x" size={14} />
+            </button>
+          )}
+        </div>
+
         <div className="flex-1 overflow-y-auto px-2 pb-3">
-          {folders.map(folderBlock)}
-          {loose.map((c) => chatRow(c, false))}
+          {query.trim() ? (
+            <SearchResults />
+          ) : (
+            <>
+              {pinned.length > 0 && (
+                <div className="mb-1">
+                  <div className="px-3 pb-1 pt-2 text-xs text-zinc-500">Закреплённые</div>
+                  {pinned.map((c) => chatRow(c, false))}
+                  <div className="mx-3 my-2 border-t border-fg/5" />
+                </div>
+              )}
+              {folders.map(folderBlock)}
+              {loose.map((c) => chatRow(c, false))}
+            </>
+          )}
         </div>
 
         <button

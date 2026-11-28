@@ -51,6 +51,8 @@ const PATHS = {
   send: <path d="M12 19V5M6 11l6-6 6 6" />,
   stop: <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />,
   forward: <path d="M5 12h12M13 7l5 5-5 5" />,
+  search: <path d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4" />,
+  pin: <path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7" />,
   chat: <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />,
 } satisfies Record<string, ReactNode>;
 

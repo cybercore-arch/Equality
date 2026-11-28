@@ -199,3 +199,14 @@ body {
 .md code:not(pre code) { background: rgb(var(--z-900)); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.9em; }
 .md table { border-collapse: collapse; }
 .md th, .md td { border: 1px solid rgb(var(--z-700)); padding: 4px 8px; }
+
+/* Подсветка кода: приглушённые цвета, читаются и на светлой, и на тёмной теме */
+.hljs-comment, .hljs-quote { color: rgb(var(--z-500)); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-built_in { color: #c084fc; }
+.hljs-string, .hljs-regexp, .hljs-addition { color: #4ade80; }
+.hljs-number, .hljs-attr, .hljs-symbol, .hljs-bullet { color: #fb923c; }
+.hljs-title, .hljs-section, .hljs-name, .hljs-function { color: #60a5fa; }
+.hljs-type, .hljs-class, .hljs-variable, .hljs-template-variable { color: #f472b6; }
+.hljs-deletion { color: #f87171; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
