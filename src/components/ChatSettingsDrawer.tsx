@@ -5,7 +5,8 @@ import { getMode } from '../modes';
 import { useChat } from '../store/chat';
 import { buildContext, resolveRp } from '../store/prompt';
 import { useRp } from '../store/rp';
-import { WIDGETS, stripWidgetTags } from '../widgets/registry';
+import { WIDGETS, stripWidgetTags, type CustomWidgetDef } from '../widgets/registry';
+import { CustomWidgetEditor } from './CustomWidgetEditor';
 import { chatToMarkdown } from '../lib/backup';
 import { saveFile } from '../lib/saveFile';
 import { useSettings } from '../store/settings';
@@ -94,6 +95,8 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
   const defaultPersonaId = useSettings((s) => s.defaultPersonaId);
   const globalPrompt = useSettings((s) => s.globalPrompt);
   const searchEnabled = useSettings((s) => s.searchEnabled);
+  const customWidgets = useSettings((s) => s.customWidgets);
+  const [editingWidget, setEditingWidget] = useState<CustomWidgetDef | 'new' | null>(null);
 
   // Черновики текстовых полей: в базу пишем, когда пользователь закончил ввод
   const [promptDraft, setPromptDraft] = useState(chat?.systemPrompt ?? '');
@@ -180,7 +183,7 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
             <p className="text-xs text-zinc-500">
               Интерактивные панели над полем ввода. Модель управляет ими тегами в своих ответах (ты их не видишь как текст), а твои действия в виджете уходят ей как обычные сообщения. Работает в любом режиме.
             </p>
-            {WIDGETS.map((w) => {
+            {[...WIDGETS.map((w) => ({ ...w, custom: undefined as CustomWidgetDef | undefined })), ...customWidgets.map((d) => ({ id: `panel:${d.id}`, name: d.name, description: d.instruction.slice(0, 80), custom: d as CustomWidgetDef | undefined }))].map((w) => {
               const on = chat.widgets?.includes(w.id) ?? false;
               return (
                 <label key={w.id} className="flex items-start gap-3 text-sm text-zinc-300">
@@ -198,9 +201,38 @@ export function ChatSettingsDrawer({ onClose: onCloseProp }: { onClose: () => vo
                     <span className="block">{w.name}</span>
                     <span className="block text-xs text-zinc-500">{w.description}</span>
                   </span>
+                  {w.custom && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setEditingWidget(w.custom!);
+                      }}
+                      className="ml-auto shrink-0 rounded-lg p-1 text-zinc-500 hover:text-zinc-200"
+                      aria-label="Изменить виджет"
+                    >
+                      <Icon name="edit" size={16} />
+                    </button>
+                  )}
                 </label>
               );
             })}
+            <button onClick={() => setEditingWidget('new')} className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 py-2 text-sm text-zinc-400 hover:border-zinc-500">
+              <Icon name="plus" size={16} />
+              Свой виджет
+            </button>
+            {editingWidget && (
+              <CustomWidgetEditor
+                def={editingWidget === 'new' ? undefined : editingWidget}
+                onClose={() => setEditingWidget(null)}
+                onSaved={(id) => {
+                  if (editingWidget === 'new') {
+                    const cur = chat.widgets ?? [];
+                    void updateChat(chat.id, { widgets: [...cur, `panel:${id}`], widgetsOpen: true });
+                  }
+                }}
+              />
+            )}
           </Collapsible>
 
           <Collapsible

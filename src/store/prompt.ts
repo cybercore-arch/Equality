@@ -150,7 +150,7 @@ export function buildContext(args: {
       ? `[Справочная информация. Учитывай её, когда это уместно, не пересказывай дословно]\n${hits.map((e) => sub(e.content.trim())).join('\n\n')}`
       : '',
     web: args.webTool ? (args.webResults ? `${SEARCH_RULES}\n\n${args.webResults}\n\nРезультаты получены, теперь отвечай пользователю. Тег <search> нужен только если результатов явно не хватает.` : SEARCH_RULES) : '',
-    widgets: chat.widgets?.length ? widgetPrompt(chat.widgets, foldWidgets(path.map((id) => messages[id]).filter(Boolean))) : '',
+    widgets: chat.widgets?.length ? widgetPrompt(chat.widgets, foldWidgets(path.map((id) => messages[id]).filter(Boolean)), useSettings.getState().customWidgets) : '',
     instruction: args.instruction?.trim() ? `[Пожелание пользователя к этому ответу: ${args.instruction.trim()}]` : '',
   };
 

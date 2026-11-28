@@ -114,7 +114,7 @@ async function decrypt(file: EncryptedFile, password: string): Promise<string> {
 
 // ---------- сбор данных ----------
 
-const SETTINGS_FIELDS = ['providers', 'activeProvider', 'searchProvider', 'searchKeys', 'modeId', 'customModes', 'onboarded', 'searchEnabled', 'globalPrompt', 'defaultPersonaId', 'autoSummary'] as const;
+const SETTINGS_FIELDS = ['providers', 'activeProvider', 'searchProvider', 'searchKeys', 'modeId', 'customModes', 'customWidgets', 'onboarded', 'searchEnabled', 'globalPrompt', 'defaultPersonaId', 'autoSummary'] as const;
 const THEME_FIELDS = ['mode', 'accent', 'bubbleAlpha', 'panelAlpha', 'blur', 'radius', 'fontSize', 'bgBlur', 'bgDim'] as const;
 
 async function collect(includeKeys: boolean): Promise<BackupData> {

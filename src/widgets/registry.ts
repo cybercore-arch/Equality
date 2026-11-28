@@ -9,7 +9,20 @@ import type { Message, WidgetOp } from '../types';
  * Поэтому свайпы, правка, удаление и ветки работают сами: сменилась ветка, сменилось и состояние виджета.
  */
 
-export type WidgetId = 'phone' | 'status' | 'roll';
+export type WidgetId = 'phone' | 'status' | 'roll' | `panel:${string}`;
+
+/** Свой виджет, который пользователь создал сам: панель с текстом, который обновляет модель. */
+export interface CustomWidgetDef {
+  id: string;
+  name: string;
+  /** Что в панели и когда модели её обновлять */
+  instruction: string;
+  /** replace: показывается последнее значение; log: записи копятся списком */
+  mode: 'replace' | 'log';
+}
+
+export const isPanel = (id: string): id is `panel:${string}` => id.startsWith('panel:');
+const norm = (name: string) => name.trim().toLowerCase();
 
 export interface PhoneState {
   threads: Record<string, { from: 'me' | 'them'; text: string }[]>;
@@ -26,10 +39,18 @@ export interface WidgetStates {
   phone: PhoneState;
   status: StatusState;
   roll: RollState;
+  /** Записи своих виджетов по названию (в нижнем регистре) */
+  panels: Record<string, string[]>;
 }
 
 /** Виджеты, которые рисуются в окне над полем ввода (статус показывается полоской под шапкой) */
-export const FRAME_WIDGETS: WidgetId[] = ['phone', 'roll'];
+export const isFrameWidget = (id: string): boolean => id === 'phone' || id === 'roll' || isPanel(id);
+
+/** Записи своего виджета для показа: в режиме replace только последняя. */
+export function panelEntries(st: WidgetStates, def: CustomWidgetDef): string[] {
+  const all = st.panels[norm(def.name)] ?? [];
+  return def.mode === 'replace' ? all.slice(-1) : all;
+}
 
 export const WIDGETS: { id: WidgetId; name: string; description: string }[] = [
   { id: 'phone', name: 'Телефон', description: 'Мессенджер: персонажи пишут тебе, ты отвечаешь' },
@@ -41,9 +62,10 @@ const initial = (): WidgetStates => ({
   phone: { threads: {}, order: [] },
   status: { fields: [] },
   roll: { pending: null },
+  panels: {},
 });
 
-const TAG = /<(phone|status|roll)\b((?:[^>"']|"[^"]*"|'[^']*')*?)(?:\/>|>([\s\S]*?)<\/\1>)/g;
+const TAG = /<(phone|status|roll|panel)\b((?:[^>"']|"[^"]*"|'[^']*')*?)(?:\/>|>([\s\S]*?)<\/\1>)/g;
 const ATTR = /([^\s=\/>"']+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 function attrs(src: string): [string, string][] {
@@ -60,8 +82,8 @@ export function stripWidgetTags(text: string): string {
     .replace(/<search>[\s\S]*?<\/search>/gi, '')
     .replace(/<search>[\s\S]*$/i, '')
     .replace(/<s(e(a(r(c(h)?)?)?)?)?$/i, '')
-    .replace(/<(phone|status|roll)\b[^>]*$/i, '')
-    .replace(/<(phone|status|roll)\b[^>]*>[^<]*$/i, '')
+    .replace(/<(phone|status|roll|panel)\b[^>]*$/i, '')
+    .replace(/<(phone|status|roll|panel)\b[^>]*>[^<]*$/i, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -85,6 +107,12 @@ function applyAssistant(st: WidgetStates, text: string) {
         } else if (i >= 0) st.status.fields[i] = [k, v];
         else st.status.fields.push([k, v]);
       }
+    } else if (name === 'panel') {
+      const key = norm(a.find(([k]) => k === 'name')?.[1] ?? '');
+      if (!key) continue;
+      const text = body.trim();
+      if (text === '' || text === '-') st.panels[key] = [];
+      else st.panels[key] = [...(st.panels[key] ?? []), text].slice(-50);
     } else if (name === 'roll') {
       st.roll.pending = { d: a.find(([k]) => k === 'd')?.[1] || 'd20', reason: body.trim() };
     }
@@ -113,7 +141,7 @@ export function foldWidgets(messages: Message[]): WidgetStates {
 }
 
 /** Текст для системного промпта: как управлять виджетом и что в нём сейчас. */
-export function widgetPrompt(enabled: string[], st: WidgetStates): string {
+export function widgetPrompt(enabled: string[], st: WidgetStates, custom: CustomWidgetDef[] = []): string {
   const parts: string[] = [];
   if (enabled.includes('phone')) {
     const recent = st.phone.order
@@ -147,8 +175,18 @@ export function widgetPrompt(enabled: string[], st: WidgetStates): string {
         (st.roll.pending ? `\nСейчас ожидается бросок ${st.roll.pending.d}: ${st.roll.pending.reason}` : ''),
     );
   }
+  for (const def of custom.filter((d) => enabled.includes(`panel:${d.id}`))) {
+    const cur = panelEntries(st, def);
+    parts.push(
+      `Виджет «${def.name}» включён: панель у пользователя. ${def.instruction.trim()} ` +
+        `Чтобы ${def.mode === 'replace' ? 'заменить содержимое панели' : 'добавить запись в панель'}, добавь в ответ тег <panel name="${def.name}">текст</panel>` +
+        `${def.mode === 'replace' ? ' (в нём всё содержимое целиком). ' : ' (в нём одна новая запись). '}` +
+        'Тег <panel name="…">-</panel> очищает панель. Пользователь видит текст в панели, а не в ответе.' +
+        (cur.length ? `\nСейчас в панели «${def.name}»:\n${cur.slice(-8).join('\n---\n')}` : `\nПанель «${def.name}» сейчас пуста.`),
+    );
+  }
   if (!parts.length) return '';
-  const tags = [enabled.includes('phone') && '<phone>', enabled.includes('status') && '<status>', enabled.includes('roll') && '<roll>'].filter(Boolean).join(', ');
+  const tags = [enabled.includes('phone') && '<phone>', enabled.includes('status') && '<status>', enabled.includes('roll') && '<roll>', custom.some((d) => enabled.includes(`panel:${d.id}`)) && '<panel>'].filter(Boolean).join(', ');
   parts.push(
     `Существуют ТОЛЬКО теги: ${tags}. Других тегов нет: не придумывай новые (погоду, время, инвентарь и т.п. пиши обычным текстом` +
       `${enabled.includes('status') ? ' или в <status>' : ''}). Каждый тег делает только то, что описано выше.`,

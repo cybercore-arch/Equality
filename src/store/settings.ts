@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CATALOG } from '../providers/catalog';
+import type { CustomWidgetDef } from '../widgets/registry';
 import type { SearchProviderId } from '../lib/websearch';
 import type { Mode, ProviderConfig, ProviderKind } from '../types';
 import { isNative, secureGet, secureSet, secureStage, secureWorks } from './secure';
@@ -52,6 +53,10 @@ interface SettingsState {
   modeId: string;
   /** Свои режимы */
   customModes: Mode[];
+  /** Свои виджеты */
+  customWidgets: CustomWidgetDef[];
+  saveWidget: (w: CustomWidgetDef) => void;
+  deleteWidget: (id: string) => void;
   saveMode: (m: Mode) => void;
   deleteMode: (id: string) => void;
   /** Прошёл ли пользователь экран первого запуска */
@@ -149,6 +154,9 @@ export const useSettings = create<SettingsState>()(
       setSearchKey: (id, key) => set((s) => ({ searchKeys: { ...s.searchKeys, [id]: key } })),
       modeId: 'general',
       customModes: [],
+      customWidgets: [],
+      saveWidget: (w) => set((s) => ({ customWidgets: s.customWidgets.some((x) => x.id === w.id) ? s.customWidgets.map((x) => (x.id === w.id ? w : x)) : [...s.customWidgets, w] })),
+      deleteWidget: (id) => set((s) => ({ customWidgets: s.customWidgets.filter((x) => x.id !== id) })),
       saveMode: (m) => set((s) => ({ customModes: s.customModes.some((x) => x.id === m.id) ? s.customModes.map((x) => (x.id === m.id ? m : x)) : [...s.customModes, m] })),
       deleteMode: (id) => set((s) => ({ customModes: s.customModes.filter((x) => x.id !== id), modeId: s.modeId === id ? 'general' : s.modeId })),
       onboarded: false,

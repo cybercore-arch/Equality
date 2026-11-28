@@ -2,23 +2,31 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useOverlay } from '../lib/overlay';
 import { useChat } from '../store/chat';
-import { FRAME_WIDGETS, WIDGETS, type PhoneState, type WidgetId, type WidgetStates } from '../widgets/registry';
+import { useSettings } from '../store/settings';
+import { isFrameWidget, isPanel, panelEntries, WIDGETS, type CustomWidgetDef, type PhoneState, type WidgetId, type WidgetStates } from '../widgets/registry';
 import { useWidgets } from '../widgets/useStates';
 import { Icon } from './Icon';
 import { DiceWidget } from './widgets/DiceWidget';
+import { PanelWidget } from './widgets/PanelWidget';
 import { PhoneWidget } from './widgets/PhoneWidget';
 
 type PanelId = Exclude<WidgetId, 'status'>;
 
 /** Короткая строка для свёрнутой панели: что сейчас происходит в виджетах. */
-function peekText(enabled: PanelId[], st: WidgetStates): { text: string; hot: boolean } {
+function peekText(enabled: PanelId[], st: WidgetStates, custom: CustomWidgetDef[]): { text: string; hot: boolean } {
   if (enabled.includes('roll') && st.roll.pending) return { text: `Нужен бросок ${st.roll.pending.d}${st.roll.pending.reason ? `: ${st.roll.pending.reason}` : ''}`, hot: true };
   if (enabled.includes('phone')) {
     const last = st.phone.order[st.phone.order.length - 1];
     const m = last ? st.phone.threads[last].slice(-1)[0] : undefined;
     if (m) return { text: `${m.from === 'me' ? 'Ты' : last}: ${m.text}`, hot: m.from === 'them' };
   }
-  return { text: enabled.includes('phone') ? 'Телефон' : 'Кубики', hot: false };
+  const first = enabled[0];
+  if (first && isPanel(first)) {
+    const def = custom.find((d) => `panel:${d.id}` === first);
+    const last = def ? panelEntries(st, def).slice(-1)[0] : undefined;
+    if (def) return { text: last ? `${def.name}: ${last.split('\n')[0]}` : def.name, hot: false };
+  }
+  return { text: enabled.includes('phone') ? 'Телефон' : enabled.includes('roll') ? 'Кубики' : 'Виджеты', hot: false };
 }
 
 interface PhoneProps {
@@ -79,7 +87,9 @@ export function WidgetDock() {
   const send = useChat((s) => s.send);
   const updateChat = useChat((s) => s.updateChat);
   const { enabled: all, states } = useWidgets();
-  const enabled = all.filter((id): id is PanelId => FRAME_WIDGETS.includes(id));
+  const custom = useSettings((s) => s.customWidgets);
+  const enabled = all.filter((id): id is PanelId => isFrameWidget(id));
+  const nameOf = (id: string) => WIDGETS.find((w) => w.id === id)?.name ?? custom.find((d) => `panel:${d.id}` === id)?.name ?? id;
   const [tab, setTab] = useState<PanelId | null>(null);
   const [full, setFull] = useState(false);
   const [contact, setContact] = useState<string | null>(null);
@@ -90,7 +100,7 @@ export function WidgetDock() {
   const phoneProps: PhoneProps = { state: states.phone, busy, contact, onContact: setContact };
 
   if (!chat.widgetsOpen) {
-    const { text, hot } = peekText(enabled, states);
+    const { text, hot } = peekText(enabled, states, custom);
     return (
       <button
         onClick={() => setOpen(true)}
@@ -115,7 +125,7 @@ export function WidgetDock() {
               onClick={() => setTab(id)}
               className={`rounded-full px-3 py-1 text-xs transition-colors ${id === active ? 'bg-fg text-zinc-950' : 'bg-zinc-800 text-zinc-400'}`}
             >
-              {WIDGETS.find((w) => w.id === id)?.name}
+              {nameOf(id)}
             </button>
           ))}
         <span className="ml-auto" />
@@ -131,8 +141,13 @@ export function WidgetDock() {
       <div className="max-h-[42dvh] overflow-y-auto">
         {active === 'phone' ? (
           !full && <ConnectedPhone {...phoneProps} />
-        ) : (
+        ) : active === 'roll' ? (
           <DiceWidget state={states.roll} busy={busy} onRoll={(text, ops) => void send(text, undefined, ops)} />
+        ) : (
+          (() => {
+            const def = custom.find((d) => `panel:${d.id}` === active);
+            return def ? <PanelWidget entries={panelEntries(states, def)} log={def.mode === 'log'} /> : null;
+          })()
         )}
       </div>
       {full && active === 'phone' && <PhoneFull {...phoneProps} onClose={() => setFull(false)} />}
